@@ -13,6 +13,6 @@ export HH_AUTO_APPLY_DRAFT_THRESHOLD="${HH_AUTO_APPLY_DRAFT_THRESHOLD:-85}"
 export HH_AUTO_APPLY_MIN_SCORE="${HH_AUTO_APPLY_MIN_SCORE:-85}"
 export HH_AUTO_APPLY_LIMIT="${HH_AUTO_APPLY_LIMIT:-20}"
 export HH_AUTO_APPLY_DAILY_LIMIT="${HH_AUTO_APPLY_DAILY_LIMIT:-30}"
-export HH_AUTO_APPLY_QUERIES="${HH_AUTO_APPLY_QUERIES:-AI agents developer|AI Agent Systems Engineer|AgentOps engineer|LLM platform engineer|MLOps AI platform engineer|AI automation architect|AI implementation engineer|Multi-agent systems engineer|Prompt engineer AI agents|MCP developer|RAG engineer|Full-stack AI engineer|Backend AI platform engineer|Telegram bot AI developer}"
+export HH_AUTO_APPLY_QUERIES="${HH_AUTO_APPLY_QUERIES:-Python Backend developer|Python Backend Engineer|Backend Python developer|Senior Python Backend Engineer|FastAPI developer|Django backend developer|Python API integrations engineer|Backend integrations engineer|Python automation backend developer|AI Backend Engineer|LLM Backend Engineer|AI agents developer|AI Agent Systems Engineer|AgentOps engineer|LLM platform engineer|MLOps AI platform engineer|MCP developer|RAG engineer|Backend AI platform engineer|Telegram bot Python developer}"
 
 exec ./scripts/run_hh_auto_apply.sh "$@"
