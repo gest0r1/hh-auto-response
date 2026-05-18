@@ -19,6 +19,15 @@ __hh_override_names=(
   HH_TELEGRAM_DRAFT_THRESHOLD
   HH_TELEGRAM_POLL_TIMEOUT
   HH_TELEGRAM_QUERIES
+  HH_TELEGRAM_PYTHON
+  HH_TELEGRAM_CHAT_ID
+  HH_CHAT_REPLY_SEND
+  HH_CHAT_EXTERNAL_SUBMIT
+  HH_CHAT_REPLY_HEADLESS
+  HH_CHAT_REPLY_LIMIT
+  HH_CHAT_REPLY_MAX_CHATS
+  HH_CHAT_REPLY_STATE_FILE
+  HH_CHAT_REPLY_PYTHON
 )
 declare -A __hh_overrides=()
 for __hh_key in "${__hh_override_names[@]}"; do
@@ -45,5 +54,21 @@ export HH_CRM_DB_PATH="${HH_CRM_DB_PATH:-./data/hh_crm.sqlite3}"
 export HH_TELEGRAM_CHAT_ID_PATH="${HH_TELEGRAM_CHAT_ID_PATH:-./data/hh_telegram_chat_id.txt}"
 export HH_TELEGRAM_OFFSET_PATH="${HH_TELEGRAM_OFFSET_PATH:-./data/hh_telegram_offset.txt}"
 export HH_TELEGRAM_RUN_LOCK_PATH="${HH_TELEGRAM_RUN_LOCK_PATH:-./data/hh_telegram_run.lock}"
+
+if [[ -z "${HH_TELEGRAM_PYTHON:-}" ]]; then
+  if [[ -x /usr/local/lib/hermes-agent/venv/bin/python3 ]]; then
+    HH_TELEGRAM_PYTHON=/usr/local/lib/hermes-agent/venv/bin/python3
+  elif command -v python3 >/dev/null 2>&1; then
+    HH_TELEGRAM_PYTHON="$(command -v python3)"
+  elif [[ -x /usr/bin/python3 ]]; then
+    HH_TELEGRAM_PYTHON=/usr/bin/python3
+  elif command -v python >/dev/null 2>&1; then
+    HH_TELEGRAM_PYTHON="$(command -v python)"
+  else
+    echo "HH Telegram: no Python interpreter found" >&2
+    exit 127
+  fi
+fi
+export HH_TELEGRAM_PYTHON
 
 mkdir -p ./data ./logs

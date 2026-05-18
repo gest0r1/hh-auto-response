@@ -6,6 +6,8 @@ logs/
 *.db
 *.db-*
 data/review_queue.md
+data/review_queue_today.md
+data/hh_chat_reply_state.json
 data/hh_telegram_*
 data/hh-browser-profile/
 data/*screenshot*.pdf

@@ -1,3 +1,4 @@
+from app.config import default_applicant_profile
 from app.responses import (
     ApplicantProfile,
     CaseStudy,
@@ -6,6 +7,8 @@ from app.responses import (
     generate_cover_letter,
     load_cover_letter_methodology,
     sanitize_cover_letter_greeting,
+    _important_requirements,
+    _requirement_focus_terms,
 )
 from app.scoring import Vacancy
 
@@ -64,7 +67,7 @@ def test_generate_cover_letter_never_uses_employer_name_as_greeting():
     response = generate_cover_letter(ResponseContext(profile=profile, vacancy=vacancy, score=90))
 
     first_sentence = response.message.split(".", 1)[0]
-    assert first_sentence == "Здравствуйте! Увидел вакансию «Python-разработчик AI-агентов»"
+    assert first_sentence == "Здравствуйте! Увидел вакансию Python-разработчик AI-агентов"
     assert "Здравствуйте, ИП" not in response.message
     assert "ИП Иванов" not in response.message
     assert "https://portfolio.viably.dev" in response.message
@@ -89,8 +92,24 @@ def test_cover_letter_methodology_contains_employer_greeting_rule():
     assert "не обращаемся к работодателю по названию компании" in methodology.lower()
     assert "Здравствуйте!" in methodology
     assert "Что важно" in methodology
+    assert "Чем предстоит заниматься" in methodology
+    assert "Что мы ждём" in methodology
     assert "стек" in methodology.lower()
-    assert "где и когда применял" in methodology.lower()
+    assert "без кавычек" in methodology.lower()
+    assert "по стеку из вакансии" in methodology.lower()
+    assert "для таких задач важно не просто" in methodology.lower()
+    assert "не вылизываем" in methodology.lower()
+    assert "живой" in methodology.lower()
+    assert "не очередной вайбкодер" in methodology.lower()
+    assert "по умолчанию" in methodology.lower()
+    assert "лёгкая высокомерность" in methodology.lower()
+    assert "не про красивые демки" in methodology.lower()
+    assert "внешние ссылки" in methodology.lower()
+    assert "humanizer-pass" in methodology.lower()
+    assert "чатбот" in methodology.lower()
+    assert "канцелярит" in methodology.lower()
+    assert "рекламный тон" in methodology.lower()
+    assert "в рамках" in methodology.lower()
 
 
 def test_generate_cover_letter_maps_vacancy_stack_and_important_block_to_concrete_project_evidence():
@@ -140,9 +159,14 @@ def test_generate_cover_letter_maps_vacancy_stack_and_important_block_to_concret
     assert "Redis" in response.message
     assert "Docker" in response.message
     assert "RAG" in response.message
-    assert "Что у вас обозначено как важное" in response.message
-    assert "реальных проектах" in response.message
-    assert "академических знаний" in response.message
+    assert "По описанию вижу главный фокус" in response.message
+    assert "Для таких задач важно не просто" not in response.message
+    assert "инженерный контур вокруг агентов" not in response.message
+    assert "По стеку из вакансии" not in response.message
+    assert "Что у вас обозначено как важное" not in response.message
+    assert "— применял" not in response.message
+    assert "Увидел вакансию «" not in response.message
+    assert "работал с FastAPI" in response.message
     assert "production" in response.message
     assert "Портфолио: https://portfolio.viably.dev" in response.message
     assert check.passed is True
@@ -206,12 +230,114 @@ def test_generate_cover_letter_for_agentic_lead_uses_multiple_portfolio_cases_an
     assert "Здравствуйте, Фордевинд" not in response.message
     assert "LandComp 2.0" in response.message
     assert "agentic SDLC" in response.message
-    assert "Definition of Done" in response.message
-    assert "Vibegent" in response.message
-    assert "Viably" in response.message
-    assert "OpenClaw" in response.message
+    assert "Увидел вакансию «" not in response.message
+    assert "По стеку из вакансии" not in response.message
+    assert "Что у вас обозначено как важное" not in response.message
+    assert "Vibegent" in response.message or "OpenClaw" in response.message
+    assert "Из похожего опыта" in response.message
+    assert "Это тот слой" in response.message
     assert "FPV40" not in response.message
     assert "\nПортфолио: https://portfolio.viably.dev" in response.message
+    assert len(response.message) <= 1600
+    assert check.passed is True
+    assert check.issues == []
+
+
+def test_default_profile_agentic_cover_letter_uses_broad_agentops_experience_and_important_block():
+    profile = default_applicant_profile()
+    vacancy = Vacancy(
+        external_id="hh-broad-agentops",
+        title="AI Agent Systems Architect / AgentOps Engineer",
+        company="Example AI",
+        description=(
+            "Что важно: production AI agents, AgentOps, многоагентные команды, RAG, tool calling, memory, "
+            "Telegram/Web-интеграции, human-in-the-loop, мониторинг, тесты и внедрение AI-агентов в бизнес-процессы."
+        ),
+        url="https://hh.ru/vacancy/broad-agentops",
+        skills=[
+            "AI agents",
+            "AgentOps",
+            "Multi-agent systems",
+            "RAG",
+            "Tool calling",
+            "Agent memory",
+            "Telegram Bots",
+            "human-in-the-loop",
+        ],
+    )
+
+    context = ResponseContext(profile=profile, vacancy=vacancy, score=98)
+    response = generate_cover_letter(context)
+    check = check_cover_letter_quality(response.message, context)
+
+    assert "Vibegent" in response.message or "Hermes Operator Contour" in response.message or "Heisenberg Team" in response.message
+    assert "По описанию вижу главный фокус" in response.message
+    assert "агентная логика" in response.message
+    assert "Из похожего опыта" in response.message
+    assert "Это тот слой" in response.message
+    assert "Сейчас много работаю" not in response.message
+    assert "Что у вас обозначено как важное" not in response.message
+    assert "По стеку из вакансии" not in response.message
+    assert "Увидел вакансию «" not in response.message
+    assert "Портфолио: https://portfolio.viably.dev" in response.message
+    assert 700 <= len(response.message) <= 1600
+    assert check.passed is True
+    assert check.issues == []
+
+
+def test_live_like_ai_product_engineer_response_anchors_to_expectation_sections():
+    profile = default_applicant_profile()
+    vacancy = Vacancy(
+        external_id="hh-130517394",
+        title="AI Product Engineer",
+        company="Lofty.",
+        description=(
+            "Мы развиваем внутреннюю лабораторию по созданию AI-агентов и ассистентов. "
+            "В портфеле — 4 действующих проекта в нишах Crypto и AI Tools с бизнес-моделью по подписке (SaaS).\n"
+            "Наша цель: Быстрая проверка гипотез и превращение концептов в коммерчески успешные продукты на базе SOTA-моделей (GPT-5, Claude) и инфраструктуры Replit/MCP.\n"
+            "Мы не обучаем модели, не крутим веса и не пишем архитектуры нейросетей на PyTorch.\n"
+            "Чем предстоит заниматься:\n"
+            "- Создавать AI-продукты под ключ: Проходить путь от идеи и гипотезы до работающего прототипа (MVP);\n"
+            "- Вайбкодинг в Replit: Активно использовать платформу и AI-агентов для быстрой сборки и внедрения решений;\n"
+            "- Работа с MCP: Поднимать и интегрировать MCP-серверы (Model Context Protocol) для расширения возможностей моделей;\n"
+            "- Промпт-инжиниринг: Писать и тестировать системные промпты, анализировать поведение моделей и добиваться нужного качества ответов;\n"
+            "- Автономный запуск: Самостоятельно разворачивать проекты (без помощи DevOps) и проводить тестирование;\n"
+            "Что мы ждем от тебя:\n"
+            "- Техническая база: Ты понимаешь принципы работы AI и умеешь использовать MCP-серверы на практике;\n"
+            "- Навыки мейкера: Можешь полностью собрать и запустить проект самостоятельно, используя современные No-code/Low-code и AI инструменты;\n"
+            "- Продуктовое мышление: Способность находить баланс между красивым кодом и скоростью проверки гипотезы;\n"
+            "Будет круто, если ты:\n"
+            "- Уже прописан в Replit и знаешь все возможности этой платформы.\n"
+            "Что мы предлагаем:\n"
+            "- Конкурентоспособную заработную плату."
+        ),
+        url="https://hh.ru/vacancy/130517394",
+        skills=["Cursor", "Replit", "MCP", "Claude", "MVP"],
+    )
+
+    context = ResponseContext(profile=profile, vacancy=vacancy, score=92)
+    requirements = _important_requirements(vacancy)
+    requirement_terms = _requirement_focus_terms(requirements, vacancy)
+    response = generate_cover_letter(context)
+    check = check_cover_letter_quality(response.message, context)
+
+    assert any("MCP-серверы" in item for item in requirements)
+    assert any("Replit" in item for item in requirements)
+    assert "Replit/Cursor" in requirement_terms
+    assert "MCP-серверы" in requirement_terms
+    assert "быстрые SaaS/MVP-гипотезы" in requirement_terms
+    assert "Тут нужен не пересказчик промптов" in response.message
+    assert "По описанию вижу главный фокус" in response.message
+    assert "Replit/Cursor" in response.message
+    assert "MCP-серверы" in response.message
+    assert "SaaS/MVP" in response.message
+    assert "прикладному AI-продукту" in response.message
+    assert "Из похожего опыта" in response.message
+    assert "Сейчас много работаю" not in response.message
+    assert response.message.index("По описанию вижу главный фокус") < response.message.index("Из похожего опыта")
+    assert len(response.message) <= 1600
+    assert "Что у вас обозначено как важное" not in response.message
+    assert "По стеку из вакансии" not in response.message
     assert check.passed is True
     assert check.issues == []
 
@@ -239,3 +365,62 @@ def test_cover_letter_quality_gate_rejects_generic_text_without_cases_or_portfol
     assert "missing_portfolio" in check.issues
     assert "missing_relevant_case" in check.issues
     assert "generic_phrase:имею большой опыт" in check.issues
+
+
+def test_cover_letter_quality_gate_rejects_robotic_hh_structure():
+    profile = ApplicantProfile(
+        headline="AI Infrastructure Engineer",
+        cases=[CaseStudy(title="Vibegent", stack=["LLM"], result="LLM-инфраструктура")],
+        portfolio_url="https://portfolio.viably.dev",
+    )
+    vacancy = Vacancy(
+        external_id="hh-robotic",
+        title="Senior AI Platform Engineer",
+        company="Example",
+        description="Что важно: production backend, LLM/RAG и CI/CD.",
+        url="https://hh.ru/vacancy/robotic",
+        skills=["LLM", "RAG", "CI/CD"],
+    )
+    robotic = (
+        "Здравствуйте! Увидел вакансию «Senior AI Platform Engineer».\n\n"
+        "По стеку из вакансии: LLM — применял в Vibegent.\n\n"
+        "Что у вас обозначено как важное: production backend.\n\n"
+        "Для таких задач важно не просто подключить LLM API.\n\n"
+        "Портфолио: https://portfolio.viably.dev"
+    )
+
+    check = check_cover_letter_quality(robotic, ResponseContext(profile=profile, vacancy=vacancy, score=90))
+
+    assert check.passed is False
+    assert "robotic_structure" in check.issues
+    assert "quoted_vacancy_title" in check.issues
+
+
+def test_cover_letter_quality_gate_rejects_ai_slop_and_bureaucratic_style():
+    profile = ApplicantProfile(
+        headline="AI Infrastructure Engineer",
+        cases=[CaseStudy(title="Vibegent", stack=["LLM"], result="LLM-инфраструктура")],
+        portfolio_url="https://portfolio.viably.dev",
+    )
+    vacancy = Vacancy(
+        external_id="hh-ai-style",
+        title="AI Engineer",
+        company="Example",
+        description="Нужно интегрировать LLM в продукт.",
+        url="https://hh.ru/vacancy/ai-style",
+        skills=["LLM"],
+    )
+    ai_slop = (
+        "Здравствуйте! Увидел вакансию AI Engineer. Конечно! Важно отметить, что в рамках данного проекта "
+        "я осуществлял работу, обеспечивая качество и демонстрируя подход. "
+        "В Vibegent делал LLM-инфраструктуру.\n\n"
+        "Портфолио: https://portfolio.viably.dev"
+    )
+
+    check = check_cover_letter_quality(ai_slop, ResponseContext(profile=profile, vacancy=vacancy, score=90))
+
+    assert check.passed is False
+    assert "ai_style:chatbot_artifact" in check.issues
+    assert "ai_style:empty_intro" in check.issues
+    assert "ai_style:bureaucratic" in check.issues
+    assert "ai_style:participle_chain" in check.issues

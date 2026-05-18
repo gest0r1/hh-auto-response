@@ -62,7 +62,7 @@ class JobSearchAgent:
                 score = score_vacancy(vacancy, self.candidate_profile)
                 vacancy_id = self.repo.upsert_vacancy(vacancy, score)
                 stats["vacancies_saved"] += 1
-                if score.score >= draft_threshold and score.decision in {"hot", "review"}:
+                if score.score >= draft_threshold and score.decision in {"hot", "review", "maybe"}:
                     generated = generate_cover_letter(
                         ResponseContext(profile=self.applicant_profile, vacancy=vacancy, score=score.score)
                     )

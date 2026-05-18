@@ -26,6 +26,8 @@ class FakeBot:
     def __init__(self) -> None:
         self.messages: list[tuple[int | str, str, dict | None]] = []
         self.message_kwargs: list[dict[str, str | None]] = []
+        self.edits: list[tuple[int | str, int, str, dict | None]] = []
+        self.edit_kwargs: list[dict[str, str | None]] = []
         self.callback_answers: list[tuple[str, str | None, bool]] = []
         self.commands: list[dict[str, str]] | None = None
 
@@ -43,6 +45,19 @@ class FakeBot:
     ) -> dict:
         self.messages.append((chat_id, text, reply_markup))
         self.message_kwargs.append({"parse_mode": parse_mode})
+        return {"ok": True}
+
+    def edit_message_text(
+        self,
+        chat_id: int | str,
+        message_id: int,
+        text: str,
+        reply_markup: dict | None = None,
+        *,
+        parse_mode: str | None = None,
+    ) -> dict:
+        self.edits.append((chat_id, message_id, text, reply_markup))
+        self.edit_kwargs.append({"parse_mode": parse_mode})
         return {"ok": True}
 
     def answer_callback_query(
@@ -129,7 +144,7 @@ def json_loads(raw: bytes) -> dict:
     return json.loads(raw.decode("utf-8"))
 
 
-def test_format_vacancy_message_contains_apply_link_reasons_and_draft() -> None:
+def test_format_vacancy_message_is_compact_review_card_without_draft() -> None:
     row = {
         "title": "Python AI Engineer",
         "company": "AgentCo",
@@ -151,11 +166,10 @@ def test_format_vacancy_message_contains_apply_link_reasons_and_draft() -> None:
     assert "Score: 91 / hot" in message
     assert "https://hh.ru/applicant/vacancy_response?vacancyId=123" in message
     assert "skill match: Python" in message
-    assert "Черновик:\n<pre>" in message
-    assert "Опыт &lt;RAG&gt; &amp; CRM." in message
+    assert "Черновик" not in message
+    assert "Опыт &lt;RAG&gt; &amp; CRM." not in message
     assert "Опыт <RAG> & CRM." not in message
-    assert "Портфолио: https://portfolio.viably.dev." in message
-    assert message.endswith("</pre>")
+    assert "Портфолио: https://portfolio.viably.dev." not in message
     assert len(message) <= 4096
 
 
@@ -176,6 +190,8 @@ def test_agent_sends_real_review_queue_with_inline_buttons_and_excludes_demo_by_
     combined = _texts(bot)
     assert "Python AI automation" in combined
     assert "Demo vacancy" not in combined
+    assert "Черновик" not in combined
+    assert "Здравствуйте! Готов быстро включиться." not in combined
     assert bot.messages[0][0] == 12345
     assert bot.message_kwargs[0]["parse_mode"] == "HTML"
     markup = bot.messages[0][2]
@@ -191,6 +207,66 @@ def test_agent_sends_real_review_queue_with_inline_buttons_and_excludes_demo_by_
             ],
         ]
     }
+
+
+def test_agent_sends_review_queue_as_single_native_menu_with_navigation(tmp_path) -> None:
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    first_app_id = _draft(repo, external_id="hh-first", title="First native card", score=95)
+    second_app_id = _draft(repo, external_id="hh-second", title="Second native card", score=94)
+    third_app_id = _draft(repo, external_id="hh-third", title="Third native card", score=93)
+    bot = FakeBot()
+    agent = HHTelegramReviewAgent(
+        repo=repo,
+        bot=bot,
+        settings=TelegramReviewSettings(chat_id_path=tmp_path / "chat_id", min_score=80, limit=5),
+    )
+
+    shown = agent.send_queue(chat_id=12345)
+
+    assert shown == 3
+    assert len(bot.messages) == 1
+    _chat_id, text, markup = bot.messages[0]
+    assert "First native card" in text
+    assert "Second native card" not in text
+    assert "Third native card" not in text
+    assert markup is not None
+    assert markup["inline_keyboard"][2] == [
+        {"text": "←", "callback_data": f"hh:open:{third_app_id}"},
+        {"text": "1/3", "callback_data": f"hh:noop:{first_app_id}"},
+        {"text": "→", "callback_data": f"hh:open:{second_app_id}"},
+    ]
+
+
+def test_open_callback_replaces_same_menu_message_with_target_queue_card(tmp_path) -> None:
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    first_app_id = _draft(repo, external_id="hh-open-first", title="Open first", score=95)
+    second_app_id = _draft(repo, external_id="hh-open-second", title="Open second", score=94)
+    bot = FakeBot()
+    agent = HHTelegramReviewAgent(repo=repo, bot=bot, settings=TelegramReviewSettings(chat_id_path=tmp_path / "chat_id"))
+
+    handled = agent.handle_update(
+        {
+            "callback_query": {
+                "id": "cb-open",
+                "data": f"hh:open:{second_app_id}",
+                "message": {"message_id": 77, "chat": {"id": 12345}},
+            }
+        }
+    )
+
+    assert handled is True
+    assert bot.messages == []
+    assert len(bot.edits) == 1
+    chat_id, message_id, text, markup = bot.edits[0]
+    assert (chat_id, message_id) == (12345, 77)
+    assert "Open second" in text
+    assert "Open first" not in text
+    assert markup is not None
+    assert markup["inline_keyboard"][2] == [
+        {"text": "←", "callback_data": f"hh:open:{first_app_id}"},
+        {"text": "2/2", "callback_data": f"hh:noop:{second_app_id}"},
+        {"text": "→", "callback_data": f"hh:open:{first_app_id}"},
+    ]
 
 
 def test_agent_registers_chat_on_start_command_and_sends_queue(tmp_path) -> None:
@@ -362,7 +438,45 @@ def test_archive_and_reject_callbacks_update_crm_status(tmp_path) -> None:
     ]
 
 
-def test_send_callback_is_safe_confirmation_gate_before_marking_sent(tmp_path) -> None:
+def test_archive_callback_replaces_same_menu_message_with_next_queue_card(tmp_path) -> None:
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    first_app_id = _draft(repo, external_id="hh-archive-first", title="Archive first", score=95)
+    second_app_id = _draft(repo, external_id="hh-archive-second", title="Archive second", score=94)
+    bot = FakeBot()
+    agent = HHTelegramReviewAgent(repo=repo, bot=bot, settings=TelegramReviewSettings(chat_id_path=tmp_path / "chat_id"))
+
+    handled = agent.handle_update(
+        {
+            "callback_query": {
+                "id": "cb-archive-next",
+                "data": f"hh:archive:{first_app_id}",
+                "message": {"message_id": 77, "chat": {"id": 12345}},
+            }
+        }
+    )
+
+    assert handled is True
+    assert bot.messages == []
+    assert len(bot.edits) == 1
+    _chat_id, _message_id, text, markup = bot.edits[0]
+    assert "📦 Архивировано" in text
+    assert "Archive second" in text
+    assert "Archive first" not in text
+    assert markup == {
+        "inline_keyboard": [
+            [
+                {"text": "send", "callback_data": f"hh:send:{second_app_id}"},
+                {"text": "edit", "callback_data": f"hh:edit:{second_app_id}"},
+            ],
+            [
+                {"text": "reject", "callback_data": f"hh:reject:{second_app_id}"},
+                {"text": "archive", "callback_data": f"hh:archive:{second_app_id}"},
+            ],
+        ]
+    }
+
+
+def test_send_callback_edits_same_message_to_show_draft_then_mark_sent(tmp_path) -> None:
     repo = CRMRepository(tmp_path / "crm.sqlite3")
     app_id = _draft(repo, external_id="hh-send", title="Send me", score=91)
     bot = FakeBot()
@@ -373,15 +487,21 @@ def test_send_callback_is_safe_confirmation_gate_before_marking_sent(tmp_path) -
             "callback_query": {
                 "id": "cb-send",
                 "data": f"hh:send:{app_id}",
-                "message": {"chat": {"id": 12345}},
+                "message": {"message_id": 77, "chat": {"id": 12345}},
             }
         }
     )
 
     assert requested is True
     assert repo.dashboard_summary()["pipeline"]["draft"] == 1
-    assert "Бот не нажимает submit на HH" in _texts(bot)
-    confirm_markup = bot.messages[-1][2]
+    assert bot.messages == []
+    assert len(bot.edits) == 1
+    chat_id, message_id, draft_text, confirm_markup = bot.edits[0]
+    assert (chat_id, message_id) == (12345, 77)
+    assert "Бот не нажимает submit на HH" in draft_text
+    assert "Черновик:\n<pre>" in draft_text
+    assert "Здравствуйте! Готов быстро включиться." in draft_text
+    assert bot.edit_kwargs[0]["parse_mode"] == "HTML"
     assert confirm_markup == {
         "inline_keyboard": [
             [
@@ -396,7 +516,7 @@ def test_send_callback_is_safe_confirmation_gate_before_marking_sent(tmp_path) -
             "callback_query": {
                 "id": "cb-mark-sent",
                 "data": f"hh:mark_sent:{app_id}",
-                "message": {"chat": {"id": 12345}},
+                "message": {"message_id": 77, "chat": {"id": 12345}},
             }
         }
     )
@@ -404,6 +524,13 @@ def test_send_callback_is_safe_confirmation_gate_before_marking_sent(tmp_path) -
     assert marked is True
     assert repo.dashboard_summary()["pipeline"]["sent"] == 1
     assert repo.review_queue(min_score=80) == []
+    assert len(bot.edits) == 2
+    _chat_id, _message_id, sent_text, sent_markup = bot.edits[1]
+    assert (_chat_id, _message_id) == (12345, 77)
+    assert "Отклик отправлен" in sent_text
+    assert "Черновик" not in sent_text
+    assert "Здравствуйте! Готов быстро включиться." not in sent_text
+    assert sent_markup is None
 
 
 def test_edit_callback_explains_command_and_edit_command_updates_cover_letter(tmp_path) -> None:
@@ -417,7 +544,7 @@ def test_edit_callback_explains_command_and_edit_command_updates_cover_letter(tm
             "callback_query": {
                 "id": "cb-edit",
                 "data": f"hh:edit:{app_id}",
-                "message": {"chat": {"id": 12345}},
+                "message": {"message_id": 77, "chat": {"id": 12345}},
             }
         }
     )
@@ -432,11 +559,43 @@ def test_edit_callback_explains_command_and_edit_command_updates_cover_letter(tm
 
     assert prompted is True
     assert edited is True
-    assert f"/edit {app_id}" in _texts(bot)
+    assert bot.messages == []
+    assert len(bot.edits) == 2
+    assert f"/edit {app_id}" in bot.edits[0][2]
+    assert "✅ Черновик обновлён" in bot.edits[1][2]
+    assert "Edit me" in bot.edits[1][2]
     item = repo.application_review_item(app_id)
     assert item is not None
     assert item["cover_letter"].startswith("Здравствуйте! Новый текст")
     assert repo.dashboard_summary()["feedback_recent"][0]["event_type"] == "edited"
+
+
+def test_edit_callback_replaces_same_menu_message_with_edit_instructions(tmp_path) -> None:
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    app_id = _draft(repo, external_id="hh-edit-native", title="Edit native", score=91)
+    bot = FakeBot()
+    agent = HHTelegramReviewAgent(repo=repo, bot=bot, settings=TelegramReviewSettings(chat_id_path=tmp_path / "chat_id"))
+
+    handled = agent.handle_update(
+        {
+            "callback_query": {
+                "id": "cb-edit-native",
+                "data": f"hh:edit:{app_id}",
+                "message": {"message_id": 77, "chat": {"id": 12345}},
+            }
+        }
+    )
+
+    assert handled is True
+    assert bot.messages == []
+    assert len(bot.edits) == 1
+    _chat_id, _message_id, text, markup = bot.edits[0]
+    assert f"/edit {app_id}" in text
+    assert "Edit native" in text
+    assert markup is not None
+    assert markup["inline_keyboard"] == [
+        [{"text": "cancel", "callback_data": f"hh:cancel:{app_id}"}],
+    ]
 
 
 def test_poll_forever_survives_transient_get_updates_timeout(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

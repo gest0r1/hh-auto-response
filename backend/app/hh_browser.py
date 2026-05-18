@@ -62,6 +62,12 @@ SUBMIT_SELECTORS = [
     'button:has-text("Отправить")',
 ]
 
+SENT_CONFIRMATION_MARKERS = [
+    "Вы откликнулись",
+    "Резюме доставлено",
+    "Откликнуться повторно",
+]
+
 LOGIN_SELECTORS = [
     '[data-qa="login-input-username"]',
     'input[name="username"]',
@@ -187,11 +193,25 @@ class HHWebApplyRunner:
                 message="Cover letter filled, but submit button was not found",
                 url=getattr(self.page, "url", draft.apply_url),
             )
+        self._safe_wait("domcontentloaded")
+        self._safe_wait("networkidle")
+        self._safe_pause(3000)
+        if self._sent_confirmed():
+            return BrowserApplyResult(
+                application_id=draft.application_id,
+                vacancy_id=draft.vacancy_id,
+                status="sent",
+                message=f"Submit confirmed after clicking {clicked_selector}",
+                url=getattr(self.page, "url", draft.apply_url),
+            )
         return BrowserApplyResult(
             application_id=draft.application_id,
             vacancy_id=draft.vacancy_id,
-            status="sent",
-            message=f"Submit clicked via {clicked_selector}",
+            status="submit_unverified",
+            message=(
+                f"Submit clicked via {clicked_selector}, but HH did not show a delivered/answered confirmation. "
+                "The page may require extra questionnaire answers or async confirmation."
+            ),
             url=getattr(self.page, "url", draft.apply_url),
         )
 
@@ -203,6 +223,26 @@ class HHWebApplyRunner:
             self.page.wait_for_load_state(state)
         except Exception:
             return
+
+    def _safe_pause(self, ms: int) -> None:
+        wait_for_timeout = getattr(self.page, "wait_for_timeout", None)
+        if callable(wait_for_timeout):
+            try:
+                wait_for_timeout(ms)
+            except Exception:
+                return
+
+    def _sent_confirmed(self) -> bool:
+        text = ""
+        locator = self._safe_locator("body")
+        if locator:
+            inner_text = getattr(locator, "inner_text", None)
+            if callable(inner_text):
+                try:
+                    text = str(inner_text())
+                except Exception:
+                    text = ""
+        return any(marker in text for marker in SENT_CONFIRMATION_MARKERS)
 
     def _login_required(self) -> bool:
         current_url = getattr(self.page, "url", "").lower()

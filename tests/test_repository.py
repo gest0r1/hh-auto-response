@@ -133,6 +133,64 @@ def test_repository_sanitizes_legacy_employer_greeting_in_review_queue(tmp_path)
     assert direct_item["cover_letter"] == queue_item["cover_letter"]
 
 
+def test_record_feedback_sent_sets_sent_at_and_counts_today(tmp_path):
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    vacancy = Vacancy(
+        external_id="hh-sent-today",
+        title="Python automation engineer",
+        company="AgentCo",
+        description="Удалённая CRM автоматизация",
+        url="https://hh.ru/vacancy/sent-today",
+        raw={"apply_url": "https://hh.ru/applicant/vacancy_response?vacancyId=sent-today"},
+    )
+    vacancy_id = repo.upsert_vacancy(vacancy, ScoreResult(score=91, decision="hot", reasons=["remote"]))
+    app_id = repo.create_or_update_application(
+        vacancy_id,
+        cover_letter="Здравствуйте! Готов обсудить автоматизацию CRM.",
+        status="draft",
+        score_at_apply=91,
+    )
+
+    repo.record_feedback(vacancy_id=vacancy_id, application_id=app_id, event_type="sent", notes="auto-send")
+
+    assert repo.dashboard_summary()["metrics"]["sent_total"] == 1
+    assert repo.count_sent_today() == 1
+
+
+def test_create_or_update_application_does_not_resurrect_sent_draft(tmp_path):
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    vacancy = Vacancy(
+        external_id="hh-no-resurrect",
+        title="AI automation engineer",
+        company="AgentCo",
+        description="Удалённая AI automation вакансия",
+        url="https://hh.ru/vacancy/no-resurrect",
+        raw={"apply_url": "https://hh.ru/applicant/vacancy_response?vacancyId=no-resurrect"},
+    )
+    vacancy_id = repo.upsert_vacancy(vacancy, ScoreResult(score=91, decision="hot", reasons=["remote"]))
+    app_id = repo.create_or_update_application(
+        vacancy_id,
+        cover_letter="Здравствуйте! Первый черновик.",
+        status="draft",
+        score_at_apply=91,
+    )
+    repo.record_feedback(vacancy_id=vacancy_id, application_id=app_id, event_type="sent", notes="manual send")
+
+    same_app_id = repo.create_or_update_application(
+        vacancy_id,
+        cover_letter="Здравствуйте! Новый черновик после повторного поиска.",
+        status="draft",
+        score_at_apply=91,
+    )
+
+    assert same_app_id == app_id
+    assert repo.review_queue(min_score=80) == []
+    summary = repo.dashboard_summary()
+    assert summary["metrics"]["sent_total"] == 1
+    assert summary["top_vacancies"][0]["application_status"] == "sent"
+    assert "Первый черновик" in summary["top_vacancies"][0]["cover_letter"]
+
+
 def test_repository_review_queue_includes_draft_and_no_api_apply_url(tmp_path):
     repo = CRMRepository(tmp_path / "crm.sqlite3")
     vacancy = Vacancy(
@@ -163,3 +221,53 @@ def test_repository_review_queue_includes_draft_and_no_api_apply_url(tmp_path):
     assert queue[0]["application_status"] == "draft"
     assert queue[0]["apply_url"] == "https://hh.ru/applicant/vacancy_response?vacancyId=777"
     assert "Готов обсудить" in queue[0]["cover_letter"]
+
+
+def test_repository_review_queue_excludes_maybe_and_archive_decisions_by_default(tmp_path):
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+
+    hot_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-hot-fit",
+            title="AI Agent Systems Engineer",
+            company="AgentCo",
+            description="LLM platform and AgentOps",
+            url="https://hh.ru/vacancy/hot-fit",
+        ),
+        ScoreResult(score=91, decision="hot", reasons=["agentops"]),
+    )
+    repo.create_or_update_application(hot_id, cover_letter="Здравствуйте!", status="draft", score_at_apply=91)
+
+    maybe_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-maybe-wide",
+            title="Generic Fullstack Developer",
+            company="WideCo",
+            description="React and backend tasks",
+            url="https://hh.ru/vacancy/maybe-wide",
+        ),
+        ScoreResult(score=67, decision="maybe", reasons=["generic"]),
+    )
+    repo.create_or_update_application(maybe_id, cover_letter="Здравствуйте!", status="draft", score_at_apply=67)
+
+    archive_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-archive-old-draft",
+            title="Frontend internship",
+            company="ArchiveCo",
+            description="Junior frontend role",
+            url="https://hh.ru/vacancy/archive-old-draft",
+        ),
+        ScoreResult(score=60, decision="archive", reasons=["old draft downgraded"]),
+    )
+    repo.create_or_update_application(archive_id, cover_letter="Здравствуйте!", status="draft", score_at_apply=60)
+
+    default_queue = repo.review_queue(min_score=45, limit=10)
+    permissive_queue = repo.review_queue(min_score=45, limit=10, decisions=("hot", "review", "maybe", "archive"))
+
+    assert [row["external_id"] for row in default_queue] == ["hh-hot-fit"]
+    assert {row["external_id"] for row in permissive_queue} == {
+        "hh-hot-fit",
+        "hh-maybe-wide",
+        "hh-archive-old-draft",
+    }

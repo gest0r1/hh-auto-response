@@ -10,7 +10,7 @@ export HH_TELEGRAM_SEND_ON_START=0
 export HH_TELEGRAM_PID_PATH="${HH_TELEGRAM_PID_PATH:-./data/hh_telegram_agent.pid}"
 export HH_TELEGRAM_LOG_PATH="${HH_TELEGRAM_LOG_PATH:-./logs/hh_telegram_agent.log}"
 
-python - <<'PY'
+"$HH_TELEGRAM_PYTHON" - <<'PY'
 from __future__ import annotations
 
 import os
@@ -22,17 +22,22 @@ from pathlib import Path
 PROJECT_ROOT = Path.cwd().resolve()
 PID_PATH = Path(os.environ["HH_TELEGRAM_PID_PATH"])
 LOG_PATH = Path(os.environ["HH_TELEGRAM_LOG_PATH"])
-MARKER = "app.telegram_agent"
 
 
 def _process_matches(pid: int) -> bool:
     proc = Path("/proc") / str(pid)
     try:
-        cmdline = (proc / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "ignore")
+        args = [
+            part.decode("utf-8", "ignore")
+            for part in (proc / "cmdline").read_bytes().split(b"\0")
+            if part
+        ]
         cwd = (proc / "cwd").resolve()
     except (FileNotFoundError, ProcessLookupError, PermissionError, OSError):
         return False
-    return MARKER in cmdline and cwd == PROJECT_ROOT
+    if cwd != PROJECT_ROOT or len(args) < 3:
+        return False
+    return Path(args[0]).name.startswith("python") and args[1:3] == ["-m", "app.telegram_agent"]
 
 
 def _pid_from_file() -> int | None:

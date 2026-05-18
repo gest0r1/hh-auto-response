@@ -36,7 +36,15 @@
 - Add button actions: approve, edit, reject, archive.
 - Test: feedback updates application state and learning weights.
 
-### Task 3: HH OAuth and safe send
+### Task 3: HH browser auto-apply with safe limits
+
+- Add one-shot `auto-apply` CLI: public search → score → draft → browser runner.
+- Keep real submit behind explicit `--send`; dry-run fills forms only.
+- Add daily limit and duplicate guard through draft/sent statuses.
+- Store `sent_at`, feedback event, and run log for audit.
+- Test: mocked browser send success, dry-run, and daily-limit stop.
+
+### Task 4: HH OAuth and safe send
 
 - Add OAuth token storage without printing secrets.
 - Add resume list endpoint.
@@ -44,13 +52,13 @@
 - Add daily limit and duplicate guard.
 - Test: mocked HH send success/failure.
 
-### Task 4: Follow-up agent
+### Task 5: Follow-up agent
 
 - Add follow-up due calculation.
 - Generate follow-up draft after 2–4 days without reply.
 - Dashboard section for due follow-ups.
 
-### Task 5: Conversion analytics
+### Task 6: Conversion analytics
 
 - Track phrase/features per draft.
 - Link positive outcomes to text patterns.

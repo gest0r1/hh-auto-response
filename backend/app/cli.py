@@ -2,24 +2,108 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from app.agent import JobSearchAgent
+from app.auto_apply import AutoApplySettings, run_auto_apply_once
 from app.config import default_applicant_profile, default_candidate_profile, get_settings
 from app.db import initialize_database
+from app.google_forms import ConservativeGoogleFormRunner
 from app.hh_browser import HHWebApplyRunner, row_to_apply_draft
+from app.hh_chat import (
+    ExternalHandoffAlert,
+    HHChatReplyState,
+    HHChatRunner,
+    format_external_handoff_alert_messages,
+)
 from app.hh_client import HHClient
 from app.hh_public import HHPublicSearchClient
 from app.repository import CRMRepository
 from app.responses import ResponseContext, generate_cover_letter
 from app.review_export import render_markdown_review_queue
 from app.scoring import Vacancy, score_vacancy
+from app.telegram_agent import TelegramBotClient, settings_from_env
 
 
 def _repo() -> CRMRepository:
     settings = get_settings()
     initialize_database(settings.db_path)
     return CRMRepository(settings.db_path)
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _coerce_chat_id(value: str) -> int | str:
+    stripped = value.strip()
+    return int(stripped) if stripped.lstrip("-").isdigit() else stripped
+
+
+_HH_TELEGRAM_CHAT_ID_PLACEHOLDERS = {
+    "chatid",
+    "demo",
+    "demochatid",
+    "example",
+    "examplechatid",
+    "hhtelegramchatid",
+    "placeholder",
+    "placeholderchatid",
+    "telegramchatid",
+    "yourchatid",
+    "yourhhtelegramchatid",
+    "yourtelegramchatid",
+}
+
+
+def _is_configured_hh_telegram_chat_id(value: str | None) -> bool:
+    if value is None:
+        return False
+
+    stripped = value.strip().strip("\"'")
+    if not stripped:
+        return False
+
+    if stripped.lstrip("-").isdigit():
+        chat_id = int(stripped)
+        return chat_id not in {0, 12345, 123456}
+
+    normalized = "".join(char for char in stripped.strip("<>{}[]()").lower() if char.isalnum())
+    return normalized not in _HH_TELEGRAM_CHAT_ID_PLACEHOLDERS
+
+
+class TelegramExternalAlertNotifier:
+    def __init__(self, *, bot: TelegramBotClient, chat_id: int | str) -> None:
+        self.bot = bot
+        self.chat_id = chat_id
+
+    def send_alert(self, alert: ExternalHandoffAlert) -> None:
+        for message in format_external_handoff_alert_messages(alert):
+            for start in range(0, len(message), 4096):
+                self.bot.send_message(self.chat_id, message[start : start + 4096])
+
+
+def _build_hh_chat_alert_notifier() -> TelegramExternalAlertNotifier | None:
+    token = os.getenv("HH_TELEGRAM_BOT_TOKEN")
+    if not token:
+        return None
+
+    chat_id_value = os.getenv("HH_TELEGRAM_CHAT_ID")
+    if not _is_configured_hh_telegram_chat_id(chat_id_value):
+        telegram_settings = settings_from_env()
+        if telegram_settings.chat_id_path.exists():
+            chat_id_value = telegram_settings.chat_id_path.read_text(encoding="utf-8").strip()
+    if not _is_configured_hh_telegram_chat_id(chat_id_value):
+        return None
+
+    return TelegramExternalAlertNotifier(
+        bot=TelegramBotClient(token=token),
+        chat_id=_coerce_chat_id(chat_id_value),
+    )
 
 
 def cmd_init_db(_: argparse.Namespace) -> None:
@@ -94,7 +178,11 @@ def cmd_run_public_once(args: argparse.Namespace) -> None:
     queries = args.query or _default_queries()
     agent = JobSearchAgent(
         repo=repo,
-        hh_client=HHPublicSearchClient(user_agent=settings.hh_user_agent),
+        hh_client=HHPublicSearchClient(
+            user_agent=settings.hh_user_agent,
+            fetch_details=True,
+            require_details=True,
+        ),
         candidate_profile=default_candidate_profile(repo.get_learning_weights()),
         applicant_profile=default_applicant_profile(),
     )
@@ -180,6 +268,84 @@ def cmd_apply_browser_queue(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_auto_apply(args: argparse.Namespace) -> None:
+    settings = get_settings()
+    repo = _repo()
+    queries = args.query or _default_queries()
+    user_data_dir = args.user_data_dir or settings.hh_browser_user_data_dir
+    fetch_details = os.getenv("HH_AUTO_APPLY_FETCH_DETAILS", "1") == "1"
+    require_details = fetch_details and os.getenv("HH_AUTO_APPLY_REQUIRE_DETAILS", "1") == "1"
+    runner = HHWebApplyRunner.launch(user_data_dir=user_data_dir, headless=args.headless)
+    try:
+        result = run_auto_apply_once(
+            repo=repo,
+            search_client=HHPublicSearchClient(
+                user_agent=settings.hh_user_agent,
+                fetch_details=fetch_details,
+                require_details=require_details,
+            ),
+            candidate_profile=default_candidate_profile(repo.get_learning_weights()),
+            applicant_profile=default_applicant_profile(),
+            apply_runner=runner,
+            settings=AutoApplySettings(
+                queries=queries,
+                per_query=args.per_query,
+                draft_threshold=args.draft_threshold,
+                min_score=args.min_score,
+                limit=args.limit,
+                daily_limit=args.daily_limit,
+                send=args.send,
+                include_demo=args.include_demo,
+            ),
+        )
+    finally:
+        runner.close()
+
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def cmd_reply_hh_chats(args: argparse.Namespace) -> None:
+    settings = get_settings()
+    repo = _repo()
+    user_data_dir = args.user_data_dir or settings.hh_browser_user_data_dir
+    state = HHChatReplyState(args.state_file)
+    profile = default_applicant_profile()
+    external_submit = bool(args.external_submit or _env_flag("HH_CHAT_EXTERNAL_SUBMIT"))
+    alert_notifier = _build_hh_chat_alert_notifier()
+    try:
+        runner = HHChatRunner.launch(
+            profile=profile,
+            state=state,
+            user_data_dir=user_data_dir,
+            headless=args.headless,
+            alert_notifier=alert_notifier,
+        )
+        runner.external_form_handler = ConservativeGoogleFormRunner(page=runner.page, profile=profile)
+        try:
+            result = runner.run(
+                send=args.send,
+                limit=args.limit,
+                max_chats=args.max_chats,
+                external_submit=external_submit,
+            )
+        finally:
+            runner.close()
+    except Exception as exc:
+        details = {"error": f"{type(exc).__name__}: {exc}"}
+        repo.record_run_log(agent_name="hh-chat-replies", status="error", details=details)
+        print(json.dumps({"ok": False, **details}, ensure_ascii=False, indent=2))
+        raise SystemExit(1) from exc
+
+    details = result.to_dict()
+    status = (
+        "blocked"
+        if any(item in {"needs_login", "form_not_found"} or "needs_login" in item for item in result.statuses)
+        else "ok"
+    )
+    repo.record_run_log(agent_name="hh-chat-replies", status=status, details=details)
+    print(json.dumps(details, ensure_ascii=False, indent=2))
+
+
 def cmd_summary(_: argparse.Namespace) -> None:
     repo = _repo()
     print(json.dumps(repo.dashboard_summary(), ensure_ascii=False, indent=2))
@@ -259,6 +425,54 @@ def build_parser() -> argparse.ArgumentParser:
         help="Actually click HH submit buttons. Without this flag drafts are only inserted.",
     )
     apply_browser.set_defaults(func=cmd_apply_browser_queue)
+
+    auto_apply = sub.add_parser(
+        "auto-apply",
+        help="Full loop: public HH search, scoring, draft generation, and browser apply with daily limit",
+    )
+    auto_apply.add_argument("--query", action="append", help="HH search query; can be repeated")
+    auto_apply.add_argument("--per-query", type=int, default=20)
+    auto_apply.add_argument("--draft-threshold", type=int, default=80)
+    auto_apply.add_argument("--min-score", type=int, default=80)
+    auto_apply.add_argument("--limit", type=int, default=5)
+    auto_apply.add_argument("--daily-limit", type=int, default=5)
+    auto_apply.add_argument("--user-data-dir", default=None)
+    auto_apply.add_argument("--headless", action="store_true")
+    auto_apply.add_argument(
+        "--include-demo",
+        action="store_true",
+        help="Include seed-demo drafts; disabled by default for real HH auto-apply",
+    )
+    auto_apply.add_argument(
+        "--send",
+        action="store_true",
+        help="Actually click HH submit buttons. Without this flag auto-apply only fills drafts.",
+    )
+    auto_apply.set_defaults(func=cmd_auto_apply)
+
+    reply_hh_chats = sub.add_parser(
+        "reply-hh-chats",
+        help="Open HH chats, detect employer questions, draft or send safe follow-up replies",
+    )
+    reply_hh_chats.add_argument("--limit", type=int, default=5)
+    reply_hh_chats.add_argument("--max-chats", type=int, default=80)
+    reply_hh_chats.add_argument("--user-data-dir", default=None)
+    reply_hh_chats.add_argument("--state-file", default="./data/hh_chat_reply_state.json")
+    reply_hh_chats.add_argument("--headless", action="store_true")
+    reply_hh_chats.add_argument(
+        "--send",
+        action="store_true",
+        help="Actually send HH chat replies. Without this flag only drafts are generated.",
+    )
+    reply_hh_chats.add_argument(
+        "--external-submit",
+        action="store_true",
+        help=(
+            "Allow safe Google Form submission after HH_CHAT_EXTERNAL_SUBMIT gate. "
+            "Without it Google Forms may be filled but not submitted."
+        ),
+    )
+    reply_hh_chats.set_defaults(func=cmd_reply_hh_chats)
 
     summary = sub.add_parser("summary", help="Print dashboard summary")
     summary.set_defaults(func=cmd_summary)

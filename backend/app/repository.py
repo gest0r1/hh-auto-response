@@ -106,8 +106,15 @@ class CRMRepository:
     ) -> int:
         cover_letter = sanitize_cover_letter_greeting(cover_letter)
         with connect(self.db_path) as conn:
-            existing = conn.execute("SELECT id, draft_version FROM applications WHERE vacancy_id = ?", (vacancy_id,)).fetchone()
+            existing = conn.execute("SELECT id, draft_version, status FROM applications WHERE vacancy_id = ?", (vacancy_id,)).fetchone()
             if existing:
+                app_id = int(existing["id"])
+                current_status = str(existing["status"])
+                if status == "draft" and current_status != "draft":
+                    # Search reruns must not resurrect already handled applications
+                    # back into the review queue. Manual edits use
+                    # update_application_cover_letter() instead.
+                    return app_id
                 conn.execute(
                     """
                     UPDATE applications
@@ -116,9 +123,8 @@ class CRMRepository:
                         updated_at = datetime('now')
                     WHERE id = ?
                     """,
-                    (cover_letter, status, resume_id, score_at_apply, existing["id"]),
+                    (cover_letter, status, resume_id, score_at_apply, app_id),
                 )
-                app_id = int(existing["id"])
             else:
                 cur = conn.execute(
                     """
@@ -206,10 +212,39 @@ class CRMRepository:
                     "rejected": "rejected",
                     "archived": "archived",
                 }[event_type]
+                sent_at_sql = "sent_at = COALESCE(sent_at, datetime('now'))," if status == "sent" else ""
                 conn.execute(
-                    "UPDATE applications SET status = ?, updated_at = datetime('now') WHERE id = ?",
+                    f"""
+                    UPDATE applications
+                    SET status = ?, {sent_at_sql} updated_at = datetime('now')
+                    WHERE id = ?
+                    """,
                     (status, application_id),
                 )
+            conn.commit()
+            return int(cur.lastrowid)
+
+    def count_sent_today(self) -> int:
+        with connect(self.db_path) as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS c
+                FROM applications
+                WHERE status = 'sent'
+                  AND date(COALESCE(sent_at, updated_at)) = date('now')
+                """
+            ).fetchone()
+        return int(row["c"])
+
+    def record_run_log(self, *, agent_name: str, status: str, details: dict[str, Any]) -> int:
+        with connect(self.db_path) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO run_logs (agent_name, status, details_json)
+                VALUES (?, ?, ?)
+                """,
+                (agent_name, status, _json(details)),
+            )
             conn.commit()
             return int(cur.lastrowid)
 
@@ -257,9 +292,20 @@ class CRMRepository:
             result.append(item)
         return result
 
-    def review_queue(self, *, min_score: int = 80, limit: int = 20, include_demo: bool = False) -> list[dict[str, Any]]:
+    def review_queue(
+        self,
+        *,
+        min_score: int = 80,
+        limit: int = 20,
+        include_demo: bool = False,
+        decisions: tuple[str, ...] = ("hot", "review"),
+    ) -> list[dict[str, Any]]:
         where = "a.status = 'draft' AND v.score >= ?"
         params: list[Any] = [min_score]
+        if decisions:
+            placeholders = ", ".join("?" for _ in decisions)
+            where += f" AND v.decision IN ({placeholders})"
+            params.extend(decisions)
         if not include_demo:
             where += " AND v.external_id NOT LIKE 'demo-%'"
         params.append(limit)

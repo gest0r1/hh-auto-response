@@ -143,6 +143,27 @@ class TelegramBotClient:
             payload["reply_markup"] = reply_markup
         return self.request("sendMessage", payload)
 
+    def edit_message_text(
+        self,
+        chat_id: int | str,
+        message_id: int,
+        text: str,
+        reply_markup: dict[str, Any] | None = None,
+        *,
+        parse_mode: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+            "disable_web_page_preview": True,
+        }
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        return self.request("editMessageText", payload)
+
     def set_my_commands(self, commands: list[dict[str, str]]) -> dict[str, Any]:
         return self.request("setMyCommands", {"commands": commands})
 
@@ -181,7 +202,7 @@ def format_help_message() -> str:
         [
             "Команды HH агента:",
             "/run — свежий поиск HH и обновление очереди",
-            "/queue — показать черновики откликов с кнопками send/edit/reject/archive",
+            "/queue — показать вакансии с ссылками и кнопками send/edit/reject/archive",
             "/summary — сводка CRM",
             "/guide — методичка по откликам",
             "/edit ID текст — заменить черновик отклика",
@@ -221,10 +242,9 @@ def format_vacancy_message(row: dict[str, Any], *, index: int) -> str:
     apply_url = row.get("apply_url") or vacancy_url
     reasons = [str(value) for value in row.get("score_reasons") or []]
     penalties = [str(value) for value in row.get("score_penalties") or []]
-    cover_letter = str(row.get("cover_letter") or "")
     application_id = row.get("application_id")
 
-    prefix = "\n".join(
+    message = "\n".join(
         [
             f"HH #{index}: {_html(title)}",
             f"Компания: {_html(company)}",
@@ -237,13 +257,8 @@ def format_vacancy_message(row: dict[str, Any], *, index: int) -> str:
         ]
     )
     if penalties:
-        prefix += "\nРиски:\n" + _bullets([_html(value) for value in penalties], limit=4)
-
-    draft_prefix = "\n\nЧерновик:\n<pre>"
-    draft_suffix = "</pre>"
-    remaining = TELEGRAM_MESSAGE_LIMIT - len(prefix) - len(draft_prefix) - len(draft_suffix)
-    escaped_cover_letter = _truncate(_html(cover_letter), remaining)
-    return prefix + draft_prefix + escaped_cover_letter + draft_suffix
+        message += "\nРиски:\n" + _bullets([_html(value) for value in penalties], limit=4)
+    return _truncate(message, TELEGRAM_MESSAGE_LIMIT)
 
 
 def format_send_gate_message(row: dict[str, Any]) -> str:
@@ -263,26 +278,63 @@ def format_send_gate_message(row: dict[str, Any]) -> str:
     return prefix + _truncate(_html(row.get("cover_letter") or ""), remaining) + suffix
 
 
+def format_sent_message(row: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            "✅ Отклик отправлен",
+            f"Вакансия: {_html(row.get('title') or 'без названия')}",
+            f"Компания: {_html(row.get('company') or 'не указана')}",
+            f"ID отклика: {_html(row.get('application_id') or '—')}",
+            f"Ссылка: {_html(row.get('url') or '')}",
+        ]
+    )
+
+
+def format_closed_message(row: dict[str, Any], *, status: str) -> str:
+    return "\n".join(
+        [
+            status,
+            f"Вакансия: {_html(row.get('title') or 'без названия')}",
+            f"Компания: {_html(row.get('company') or 'не указана')}",
+            f"ID отклика: {_html(row.get('application_id') or '—')}",
+        ]
+    )
+
+
 def _review_callback(action: str, application_id: int | str | None) -> str:
     return f"hh:{action}:{application_id or 0}"
 
 
-def build_review_keyboard(row: dict[str, Any]) -> dict[str, Any] | None:
+def build_review_keyboard(
+    row: dict[str, Any],
+    *,
+    position: int | None = None,
+    total: int | None = None,
+    previous_application_id: int | str | None = None,
+    next_application_id: int | str | None = None,
+) -> dict[str, Any] | None:
     application_id = row.get("application_id")
     if not application_id:
         return None
-    return {
-        "inline_keyboard": [
+    keyboard: list[list[dict[str, str]]] = [
+        [
+            {"text": "send", "callback_data": _review_callback("send", application_id)},
+            {"text": "edit", "callback_data": _review_callback("edit", application_id)},
+        ],
+        [
+            {"text": "reject", "callback_data": _review_callback("reject", application_id)},
+            {"text": "archive", "callback_data": _review_callback("archive", application_id)},
+        ],
+    ]
+    if total and total > 1 and position and previous_application_id and next_application_id:
+        keyboard.append(
             [
-                {"text": "send", "callback_data": _review_callback("send", application_id)},
-                {"text": "edit", "callback_data": _review_callback("edit", application_id)},
-            ],
-            [
-                {"text": "reject", "callback_data": _review_callback("reject", application_id)},
-                {"text": "archive", "callback_data": _review_callback("archive", application_id)},
-            ],
-        ]
-    }
+                {"text": "←", "callback_data": _review_callback("open", previous_application_id)},
+                {"text": f"{position}/{total}", "callback_data": _review_callback("noop", application_id)},
+                {"text": "→", "callback_data": _review_callback("open", next_application_id)},
+            ]
+        )
+    return {"inline_keyboard": keyboard}
 
 
 def build_send_confirmation_keyboard(application_id: int | str) -> dict[str, Any]:
@@ -294,6 +346,27 @@ def build_send_confirmation_keyboard(application_id: int | str) -> dict[str, Any
             ]
         ]
     }
+
+
+def build_edit_cancel_keyboard(application_id: int | str) -> dict[str, Any]:
+    return {"inline_keyboard": [[{"text": "cancel", "callback_data": _review_callback("cancel", application_id)}]]}
+
+
+def format_edit_instructions_message(row: dict[str, Any]) -> str:
+    application_id = row.get("application_id") or "—"
+    return "\n".join(
+        [
+            "✏️ Редактирование черновика",
+            f"Вакансия: {_html(row.get('title') or 'без названия')}",
+            f"Компания: {_html(row.get('company') or 'не указана')}",
+            f"ID отклика: {_html(application_id)}",
+            "",
+            "Чтобы заменить черновик, пришли одной командой:",
+            f"/edit {_html(application_id)} новый текст отклика",
+            "",
+            "Правило: начинаем с «Здравствуйте!» и не обращаемся к работодателю по названию компании/ИП.",
+        ]
+    )
 
 
 def format_summary_message(summary: dict[str, Any]) -> str:
@@ -342,6 +415,16 @@ def _row_ids(row: dict[str, Any]) -> tuple[int | None, int | None]:
     return vacancy_id, application_id
 
 
+def _find_review_row_index(rows: list[dict[str, Any]], application_id: int | str | None) -> int | None:
+    if application_id is None:
+        return None
+    expected = str(application_id)
+    for index, row in enumerate(rows):
+        if str(row.get("application_id")) == expected:
+            return index
+    return None
+
+
 class HHTelegramReviewAgent:
     def __init__(
         self,
@@ -353,6 +436,7 @@ class HHTelegramReviewAgent:
         self.repo = repo
         self.bot = bot
         self.settings = settings or TelegramReviewSettings()
+        self.pending_edit_messages: dict[tuple[str, int], int] = {}
 
     def saved_chat_id(self) -> int | str | None:
         path = self.settings.chat_id_path
@@ -380,21 +464,91 @@ class HHTelegramReviewAgent:
             markup = reply_markup if index == len(chunks) - 1 else None
             self.bot.send_message(chat_id, chunk, reply_markup=markup, parse_mode=parse_mode)
 
+    def edit_text(
+        self,
+        chat_id: int | str | None,
+        message_id: int | None,
+        text: str,
+        reply_markup: dict[str, Any] | None = None,
+        *,
+        parse_mode: str | None = None,
+    ) -> None:
+        if chat_id is None or message_id is None:
+            return
+        self.bot.edit_message_text(
+            chat_id,
+            message_id,
+            _truncate(text, TELEGRAM_MESSAGE_LIMIT),
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+        )
+
+    def review_rows(self) -> list[dict[str, Any]]:
+        return self.repo.review_queue(min_score=self.settings.min_score, limit=self.settings.limit)
+
+    def review_card_payload(
+        self,
+        row: dict[str, Any],
+        *,
+        rows: list[dict[str, Any]] | None = None,
+        status_prefix: str | None = None,
+    ) -> tuple[str, dict[str, Any] | None]:
+        queue_rows = rows if rows is not None else self.review_rows()
+        row_index = _find_review_row_index(queue_rows, row.get("application_id"))
+        if row_index is None:
+            row_index = 0
+            queue_rows = [row]
+        total = len(queue_rows)
+        previous_row = queue_rows[(row_index - 1) % total] if total else row
+        next_row = queue_rows[(row_index + 1) % total] if total else row
+        text = format_vacancy_message(row, index=row_index + 1)
+        if status_prefix:
+            text = f"{status_prefix}\n\n{text}"
+        return text, build_review_keyboard(
+            row,
+            position=row_index + 1,
+            total=total,
+            previous_application_id=previous_row.get("application_id"),
+            next_application_id=next_row.get("application_id"),
+        )
+
+    def edit_to_next_review_card(
+        self,
+        chat_id: int | str | None,
+        message_id: int | None,
+        *,
+        removed_application_id: int | str,
+        previous_index: int | None,
+        status_prefix: str,
+    ) -> None:
+        rows = self.review_rows()
+        if not rows:
+            self.edit_text(
+                chat_id,
+                message_id,
+                f"{status_prefix}\n\nHH очередь пуста: подходящих draft-вакансий выше порога пока нет.",
+                parse_mode="HTML",
+            )
+            return
+        target_index = min(previous_index if previous_index is not None else 0, len(rows) - 1)
+        text, markup = self.review_card_payload(rows[target_index], rows=rows, status_prefix=status_prefix)
+        self.edit_text(chat_id, message_id, text, reply_markup=markup, parse_mode="HTML")
+
     def send_queue(self, *, chat_id: int | str | None = None) -> int:
         target_chat_id = chat_id or self.saved_chat_id()
         if target_chat_id is None:
             return 0
-        rows = self.repo.review_queue(min_score=self.settings.min_score, limit=self.settings.limit)
+        rows = self.review_rows()
         if not rows:
             self.send_text(target_chat_id, "HH очередь пуста: подходящих draft-вакансий выше порога пока нет.")
             return 0
-        for index, row in enumerate(rows, start=1):
-            self.send_text(
-                target_chat_id,
-                format_vacancy_message(row, index=index),
-                reply_markup=build_review_keyboard(row),
-                parse_mode="HTML",
-            )
+        text, markup = self.review_card_payload(rows[0], rows=rows)
+        self.send_text(
+            target_chat_id,
+            text,
+            reply_markup=markup,
+            parse_mode="HTML",
+        )
         return len(rows)
 
     def send_summary(self, *, chat_id: int | str | None = None) -> bool:
@@ -481,16 +635,19 @@ class HHTelegramReviewAgent:
         if row is None:
             self.send_text(chat_id, "Черновик создан, но не смог сразу достать его из CRM. Попробуй /queue.")
             return True
-        self.send_text(
-            chat_id,
-            "Готово, сделал целевой черновик по ссылке HH.\n"
-            f"Score: {result['score']} / {result['decision']}\n"
-            + format_quality_summary([str(issue) for issue in result.get("quality_issues") or []]),
+        text, markup = self.review_card_payload(
+            row,
+            rows=self.review_rows(),
+            status_prefix=(
+                "Готово, сделал целевой черновик по ссылке HH.\n"
+                f"Score: {result['score']} / {result['decision']}\n"
+                + format_quality_summary([str(issue) for issue in result.get("quality_issues") or []])
+            ),
         )
         self.send_text(
             chat_id,
-            format_vacancy_message(row, index=1),
-            reply_markup=build_review_keyboard(row),
+            text,
+            reply_markup=markup,
             parse_mode="HTML",
         )
         return True
@@ -506,6 +663,7 @@ class HHTelegramReviewAgent:
         callback_query_id = str(callback.get("id") or "")
         data = str(callback.get("data") or "")
         message = callback.get("message") or {}
+        message_id = message.get("message_id") if isinstance(message.get("message_id"), int) else None
         chat = message.get("chat") or {}
         chat_id = chat.get("id")
         parsed = _parse_review_callback(data)
@@ -524,6 +682,18 @@ class HHTelegramReviewAgent:
         if app_id is None:
             self.answer_callback(callback_query_id, "У отклика нет application_id", show_alert=True)
             return True
+        queue_rows = self.review_rows()
+        queue_index = _find_review_row_index(queue_rows, app_id)
+
+        if action == "noop":
+            self.answer_callback(callback_query_id, "Это текущая карточка")
+            return True
+
+        if action == "open":
+            text, markup = self.review_card_payload(row, rows=queue_rows)
+            self.answer_callback(callback_query_id, "Открыл карточку")
+            self.edit_text(chat_id, message_id, text, reply_markup=markup, parse_mode="HTML")
+            return True
 
         if action == "archive":
             self.repo.record_feedback(
@@ -533,8 +703,13 @@ class HHTelegramReviewAgent:
                 notes="Archived from Telegram inline button",
             )
             self.answer_callback(callback_query_id, "Архивировал")
-            if chat_id is not None:
-                self.send_text(chat_id, f"Архивировал: {row.get('title') or 'вакансия'}")
+            self.edit_to_next_review_card(
+                chat_id,
+                message_id,
+                removed_application_id=app_id,
+                previous_index=queue_index,
+                status_prefix="📦 Архивировано",
+            )
             return True
 
         if action == "reject":
@@ -548,20 +723,26 @@ class HHTelegramReviewAgent:
             for skill in [str(value) for value in row.get("skills") or []][:5]:
                 self.repo.update_learning_signal(skill, 0.85, positive=False)
             self.answer_callback(callback_query_id, "Отклонил и убрал из очереди")
-            if chat_id is not None:
-                self.send_text(chat_id, f"Отклонил: {row.get('title') or 'вакансия'}")
+            self.edit_to_next_review_card(
+                chat_id,
+                message_id,
+                removed_application_id=app_id,
+                previous_index=queue_index,
+                status_prefix="❌ Отклонено",
+            )
             return True
 
         if action == "edit":
             self.answer_callback(callback_query_id, "Жду новый текст")
-            if chat_id is not None:
-                self.send_text(
-                    chat_id,
-                    "Чтобы заменить черновик, пришли одной командой:\n"
-                    f"/edit {app_id} новый текст отклика\n\n"
-                    "Правило: начинаем с «Здравствуйте!» и не обращаемся к работодателю "
-                    "по названию компании/ИП.",
-                )
+            if chat_id is not None and message_id is not None:
+                self.pending_edit_messages[(str(chat_id), app_id)] = message_id
+            self.edit_text(
+                chat_id,
+                message_id,
+                format_edit_instructions_message(row),
+                reply_markup=build_edit_cancel_keyboard(app_id),
+                parse_mode="HTML",
+            )
             return True
 
         if action == "send":
@@ -571,14 +752,14 @@ class HHTelegramReviewAgent:
                 event_type="send_requested",
                 notes="Safe send gate opened from Telegram inline button",
             )
-            self.answer_callback(callback_query_id, "Открыл безопасный send gate")
-            if chat_id is not None:
-                self.send_text(
-                    chat_id,
-                    format_send_gate_message(row),
-                    reply_markup=build_send_confirmation_keyboard(app_id),
-                    parse_mode="HTML",
-                )
+            self.answer_callback(callback_query_id, "Открыл черновик")
+            self.edit_text(
+                chat_id,
+                message_id,
+                format_send_gate_message(row),
+                reply_markup=build_send_confirmation_keyboard(app_id),
+                parse_mode="HTML",
+            )
             return True
 
         if action == "mark_sent":
@@ -589,14 +770,19 @@ class HHTelegramReviewAgent:
                 notes="Marked sent from Telegram after manual HH submit",
             )
             self.answer_callback(callback_query_id, "Отметил отправленным")
-            if chat_id is not None:
-                self.send_text(chat_id, f"Отметил как отправленное: {row.get('title') or 'вакансия'}")
+            self.edit_text(chat_id, message_id, format_sent_message(row), parse_mode="HTML")
             return True
 
         if action == "cancel":
             self.answer_callback(callback_query_id, "Оставил в draft")
-            if chat_id is not None:
-                self.send_text(chat_id, "Ок, оставил черновик в очереди.")
+            text, markup = self.review_card_payload(row, rows=self.review_rows())
+            self.edit_text(
+                chat_id,
+                message_id,
+                text,
+                reply_markup=markup,
+                parse_mode="HTML",
+            )
             return True
 
         self.answer_callback(callback_query_id, "Неизвестное действие", show_alert=True)
@@ -629,12 +815,18 @@ class HHTelegramReviewAgent:
             edited_cover_letter=new_cover_letter,
         )
         updated = self.repo.application_review_item(application_id)
+        pending_message_id = self.pending_edit_messages.pop((str(chat_id), application_id), None)
+        if updated is not None and pending_message_id is not None:
+            text, markup = self.review_card_payload(updated, rows=self.review_rows(), status_prefix="✅ Черновик обновлён")
+            self.edit_text(chat_id, pending_message_id, text, reply_markup=markup, parse_mode="HTML")
+            return True
         self.send_text(chat_id, f"Обновил черновик ID {application_id}.")
         if updated is not None:
+            text, markup = self.review_card_payload(updated, rows=self.review_rows())
             self.send_text(
                 chat_id,
-                format_vacancy_message(updated, index=1),
-                reply_markup=build_review_keyboard(updated),
+                text,
+                reply_markup=markup,
                 parse_mode="HTML",
             )
         return True

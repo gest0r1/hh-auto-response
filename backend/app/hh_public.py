@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 
 import httpx
 
+from app.hh_vacancy import parse_hh_vacancy_html
 from app.scoring import Vacancy
 
 HH_WEB_BASE_URL = "https://hh.ru"
@@ -209,11 +210,15 @@ class HHPublicSearchClient:
         base_url: str = HH_WEB_BASE_URL,
         timeout: float = 20.0,
         transport: httpx.BaseTransport | None = None,
+        fetch_details: bool = False,
+        require_details: bool = False,
     ) -> None:
         self.user_agent = user_agent
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.transport = transport
+        self.fetch_details = fetch_details
+        self.require_details = require_details
 
     @property
     def headers(self) -> dict[str, str]:
@@ -237,16 +242,52 @@ class HHPublicSearchClient:
             transport=self.transport,
         ) as client:
             response = client.get(f"{self.base_url}/search/vacancy", params=params)
-        if response.status_code in {403, 429}:
-            raise RuntimeError(f"HH public search stop signal: HTTP {response.status_code}")
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise RuntimeError(f"HH public search HTTP {response.status_code}") from exc
+            if response.status_code in {403, 429}:
+                raise RuntimeError(f"HH public search stop signal: HTTP {response.status_code}")
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                raise RuntimeError(f"HH public search HTTP {response.status_code}") from exc
 
-        vacancies = parse_hh_search_html(response.text, source_url=str(response.url))
-        lower_text = response.text.lower()
-        captcha_stop = any(marker in lower_text for marker in ["/account/captcha", "data-qa=\"captcha", "captcha__"])
-        if not vacancies and captcha_stop:
-            raise RuntimeError("HH public search returned CAPTCHA/anti-bot page; stop, do not bypass")
-        return vacancies[: params["per_page"]]
+            vacancies = parse_hh_search_html(response.text, source_url=str(response.url))
+            lower_text = response.text.lower()
+            captcha_stop = any(marker in lower_text for marker in ["/account/captcha", "data-qa=\"captcha", "captcha__"])
+            if not vacancies and captcha_stop:
+                raise RuntimeError("HH public search returned CAPTCHA/anti-bot page; stop, do not bypass")
+            vacancies = vacancies[: params["per_page"]]
+            if self.fetch_details:
+                vacancies = self._fetch_public_details(client, vacancies)
+            return vacancies
+
+    def _fetch_public_details(self, client: httpx.Client, vacancies: list[Vacancy]) -> list[Vacancy]:
+        enriched: list[Vacancy] = []
+        for vacancy in vacancies:
+            try:
+                response = client.get(vacancy.url)
+                if response.status_code in {403, 429}:
+                    raise RuntimeError(f"HTTP {response.status_code}")
+                response.raise_for_status()
+                lower_text = response.text.lower()
+                captcha_stop = any(marker in lower_text for marker in ["/account/captcha", "data-qa=\"captcha", "captcha__"])
+                if captcha_stop and "application/ld+json" not in lower_text:
+                    raise RuntimeError("CAPTCHA/anti-bot page")
+                detailed = parse_hh_vacancy_html(response.text, source_url=str(response.url), vacancy_id=vacancy.raw.get("vacancy_id"))
+                raw = dict(detailed.raw)
+                raw.update(
+                    {
+                        "source": "hh_public_search_with_detail_html",
+                        "search_apply_url": vacancy.raw.get("apply_url") or "",
+                        "apply_url": vacancy.raw.get("apply_url") or raw.get("apply_url") or "",
+                        "search_source_url": vacancy.raw.get("source_url") or "",
+                    }
+                )
+                detailed.raw = raw
+                enriched.append(detailed)
+            except Exception as exc:
+                if self.require_details:
+                    continue
+                raw = dict(vacancy.raw)
+                raw["detail_fetch_error"] = str(exc)
+                vacancy.raw = raw
+                enriched.append(vacancy)
+        return enriched
