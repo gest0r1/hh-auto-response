@@ -836,11 +836,7 @@ def is_contract_logistics_prompt(text: str) -> bool:
 
 
 def _profile_location_sentence(profile: ApplicantProfile) -> str:
-    location = normalize_text(
-        os.getenv("HH_PROFILE_LOCATION")
-        or str(getattr(profile, "location", "") or "")
-        or "Россия, часовой пояс МСК"
-    )
+    location = _profile_location(profile) or "[указать город/часовой пояс]"
     return f"Проживаю: {location}."
 
 
@@ -863,7 +859,17 @@ def _telegram_nick(profile: ApplicantProfile) -> str | None:
         value = normalize_text(str(getattr(profile, field_name, "") or ""))
         if value:
             return value
-    return None
+    value = normalize_text(os.getenv("HH_PROFILE_TELEGRAM") or os.getenv("HH_TELEGRAM_NICK") or "")
+    return value or None
+
+
+def _profile_location(profile: ApplicantProfile) -> str | None:
+    value = normalize_text(
+        os.getenv("HH_PROFILE_LOCATION")
+        or str(getattr(profile, "location", "") or "")
+        or ""
+    )
+    return value or None
 
 
 def humanize_hh_chat_reply(text: str) -> str:
@@ -899,31 +905,34 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatRe
 
     if is_sap_hana_checklist_prompt(lowered):
         telegram = _telegram_nick(profile)
-        telegram_sentence = (
-            f"Telegram-ник: {telegram}."
-            if telegram
-            else "Telegram-ник в профиле не указан, не буду придумывать."
-        )
-        message = (
-            "Здравствуйте! По чек-листу честно: "
-            "+ Python: основной production стек, backend tooling, парсинг логов/файлов и интеграции. "
-            "+ SQL/PostgreSQL: production опыт, схемы, запросы, pipelines/worker-контуры. "
-            "+/- Data engineering/observability/SRE: смежно делал backend pipelines, "
-            "мониторинг, health-checks и recovery, но не как выделенный SRE/Data Engineer. "
-            "- SAP HANA trace/diagnostic files: глубокого production опыта нет. "
-            "- SAP HANA как production datasource: не заявляю. "
-            "- Iceberg/Paimon production: не заявляю. "
-            "- Kafka production: не заявляю. "
-            "- Go/Java/C++/Rust: не основной production стек. "
-            "ИП/самозанятость и outstaff можно обсуждать. "
-            "По ожиданиям: full-time 300-350 тыс. ₽, "
-            "сильная backend/fullstack/AI-инфраструктура 350-450 тыс. ₽. "
-            f"Локация: удаленно. {telegram_sentence}"
-        )
-        return HHChatReplyDraft(
-            message=humanize_hh_chat_reply(message),
-            reasons=["sap_hana_checklist_honesty", "salary"],
-        )
+        location = _profile_location(profile)
+        manual_required = not telegram or not location
+        message = _humanize_multiline(
+            "Здравствуйте! Отвечаю по полному чек-листу.\n\n"
+            "Требования:\n"
+            "[-] SAP HANA diagnostic/trace files - глубокого production опыта нет.\n"
+            "[+] Python - основной production стек; backend tooling, парсинг логов/файлов, интеграции.\n"
+            "[-] Go - не основной production стек.\n"
+            "[-] Java - не основной production стек.\n"
+            "[-] C++ - не основной production стек.\n"
+            "[-] Rust - не основной production стек.\n"
+            "[-] SAP HANA как источник данных - не заявляю production опыт.\n"
+            "[-] Iceberg/Paimon - production опыт не заявляю.\n"
+            "[-] Apache Kafka - production опыт не заявляю.\n"
+            "[+/-] Data engineering / observability / SRE - смежно делал backend pipelines, health-checks, мониторинг и recovery, но не как выделенный SRE/Data Engineer.\n\n"
+            "Условия:\n"
+            "1) ИП/СЗ - можно обсуждать.\n"
+            "2) Аутстафф - можно обсуждать.\n"
+            "3) ЗП - ориентир full-time 300-350 тыс. ₽; для сильной backend/fullstack/AI-инфраструктуры 350-450 тыс. ₽.\n"
+            f"4) Локация - {location or '[указать город/часовой пояс]'}.\n"
+            f"5) Telegram - {telegram or '[указать Telegram-ник]'} .\n\n"
+            "Если по роли критичны именно SAP HANA/Iceberg/Paimon/Kafka в production, честно скажу: я не самый точный кандидат. "
+            "Если нужен сильный Python/backend-инженер под tooling, pipelines, интеграции и автоматизацию анализа, тогда можем обсудить."
+        ).replace("[указать Telegram-ник] .", "[указать Telegram-ник].")
+        reasons = ["sap_hana_checklist_honesty", "salary"]
+        if manual_required:
+            reasons.append("manual_required")
+        return HHChatReplyDraft(message=message, reasons=reasons)
 
     if "ansible" in lowered:
         return HHChatReplyDraft(
@@ -953,6 +962,10 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatRe
         )
 
     if is_contract_logistics_prompt(lowered):
+        location_missing = not _profile_location(profile)
+        reasons = ["contract_logistics"]
+        if location_missing:
+            reasons.append("manual_required")
         return HHChatReplyDraft(
             message=_humanize_multiline(
                 "Здравствуйте!\n\n"
@@ -960,7 +973,7 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatRe
                 "К B2B-контракту открыт, такой формат сотрудничества можно обсуждать. "
                 "По юридическим деталям готов свериться под ваш процесс оформления."
             ),
-            reasons=["contract_logistics"],
+            reasons=reasons,
         )
 
     if is_vacancy_point_fit_prompt(lowered):
@@ -1209,7 +1222,7 @@ def answer_google_form_question(label: str, profile: ApplicantProfile) -> str | 
 
     if _contains_any(lowered, ["telegram", "телеграм", "tg", "ник"]):
         telegram = _telegram_nick(profile)
-        return telegram or "Telegram-ник в профиле не указан, не буду придумывать."
+        return telegram or None
 
     if _contains_any(
         lowered,
@@ -1640,6 +1653,16 @@ class HHChatRunner:
             return HHChatReplyResult(preview.chat_id, preview.title, "skipped_duplicate", question, "", preview.url, "Question was already answered by this runner")
 
         draft = generate_hh_chat_reply(question, self.profile)
+        if "manual_required" in draft.reasons:
+            return HHChatReplyResult(
+                preview.chat_id,
+                preview.title,
+                "blocked_manual_review",
+                question,
+                draft.message,
+                preview.url,
+                ",".join(draft.reasons),
+            )
         if not send:
             return HHChatReplyResult(preview.chat_id, preview.title, "draft", question, draft.message, preview.url, ",".join(draft.reasons))
 

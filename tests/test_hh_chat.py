@@ -220,7 +220,7 @@ def test_generate_hh_chat_reply_handles_language_salary_and_sales_honestly():
     assert "B2B-продаж" not in b2b_contract.message
     assert "sales manager" not in b2b_contract.message
     assert "Python/FastAPI" not in b2b_contract.message
-    assert b2b_contract.reasons == ["contract_logistics"]
+    assert b2b_contract.reasons == ["contract_logistics", "manual_required"]
 
     commercial_ai = generate_hh_chat_reply(
         "Расскажите, пожалуйста, сколько лет вы конкретно работали в коммерческих ML/AI проектах?",
@@ -252,19 +252,27 @@ def test_generate_hh_chat_reply_handles_sap_hana_checklist_honestly():
         _profile(),
     )
 
-    assert "+ Python" in draft.message
-    assert "+ SQL/PostgreSQL" in draft.message
-    assert "+/- Data engineering/observability/SRE" in draft.message
-    assert "- SAP HANA trace/diagnostic files: глубокого production опыта нет" in draft.message
-    assert "- SAP HANA как production datasource: не заявляю" in draft.message
-    assert "- Iceberg/Paimon production: не заявляю" in draft.message
-    assert "- Kafka production: не заявляю" in draft.message
-    assert "- Go/Java/C++/Rust: не основной production стек" in draft.message
+    assert "[+] Python" in draft.message
+    assert "[-] Go" in draft.message
+    assert "[-] Java" in draft.message
+    assert "[-] C++" in draft.message
+    assert "[-] Rust" in draft.message
+    assert "[+/-] Data engineering / observability / SRE" in draft.message
+    assert "[-] SAP HANA diagnostic/trace files" in draft.message
+    assert "[-] SAP HANA как источник данных" in draft.message
+    assert "[-] Iceberg/Paimon" in draft.message
+    assert "[-] Apache Kafka" in draft.message
+    assert "1) ИП/СЗ" in draft.message
+    assert "2) Аутстафф" in draft.message
+    assert "3) ЗП" in draft.message
+    assert "4) Локация - [указать город/часовой пояс]" in draft.message
+    assert "5) Telegram - [указать Telegram-ник]" in draft.message
     assert "300-350" in draft.message
     assert "350-450" in draft.message
-    assert "Telegram-ник в профиле не указан" in draft.message
-    assert "@" not in draft.message
+    assert "Telegram-ник в профиле не указан" not in draft.message
+    assert "Локация: удаленно" not in draft.message
     assert "sap_hana_checklist_honesty" in draft.reasons
+    assert "manual_required" in draft.reasons
 
 
 def test_generate_hh_chat_reply_handles_engineering_discipline():
@@ -466,16 +474,40 @@ def test_hh_chat_external_telegram_handle_instruction_is_blocked(tmp_path):
     assert result.statuses == ["blocked_external_interview"]
     reply = result.replies[0]
     assert reply["reply"].startswith("Здравствуйте! Я Александр Олегович.")
-    assert "Ответы по анкете:" in reply["reply"]
+    assert "Ответы по анкете:" not in reply["reply"]
     assert reply["external_targets"] == [
         {"kind": "telegram_handle", "value": "@mariahuntcode", "url": None}
     ]
-    assert reply["external_result"]["prepared_answers"] == [
+    assert reply["external_result"]["prepared_answers"] == []
+    assert not any(call[0] == "fill" for call in page.calls)
+
+
+def test_hh_chat_runner_blocks_manual_required_draft_even_when_send_enabled(tmp_path):
+    page = FakePage()
+    checklist = (
+        "Просьба ответить на полный чек-лист: SAP HANA trace files, Python/Go/Java/C++/Rust, "
+        "Iceberg/Paimon, Kafka, data engineering/observability/SRE. "
+        "Условия: ИП/СЗ, аутстафф, ЗП, локация, Telegram nick."
+    )
+    page.preview_rows = [
         {
-            "question": handoff,
-            "answer": "Telegram-ник в профиле не указан, не буду придумывать.",
+            "href": "https://hh.ru/chat/sap",
+            "dataQa": "chatik-open-chat-sap",
+            "text": f"Recruiter\n{checklist}",
         }
     ]
+    page.chat_body = f"Работодатель\n{checklist}"
+    page.chat_messages = [{"text": checklist, "isMine": False}]
+    state = HHChatReplyState(tmp_path / "state.json")
+    runner = HHChatRunner(page=page, profile=_profile(), state=state)
+
+    result = runner.run(send=True, limit=1)
+
+    assert result.blocked == 1
+    assert result.sent == 0
+    assert result.statuses == ["blocked_manual_review"]
+    assert "manual_required" in result.replies[0]["message"]
+    assert "[указать Telegram-ник]" in result.replies[0]["reply"]
     assert not any(call[0] == "fill" for call in page.calls)
 
 
@@ -561,16 +593,15 @@ def test_hh_chat_external_alert_is_sent_with_notifier_and_deduplicated(tmp_path)
     assert len(notifier.alerts) == 1
     alert_text = format_external_handoff_alert(notifier.alerts[0])
     alert_messages = format_external_handoff_alert_messages(notifier.alerts[0])
-    assert len(alert_messages) == 4
+    assert len(alert_messages) == 3
     assert alert_messages[0].startswith("Внешний контакт из HH\n\nВакансия:")
     assert "\n\nКуда перейти:\n- Telegram: @mariahuntcode" in alert_messages[0]
     assert alert_messages[1].startswith("Сообщение работодателя:\n\n")
     assert alert_messages[2].startswith("Готовый текст для вставки:\n\n")
-    assert alert_messages[3].startswith("Отдельные ответы по анкете:\n\n")
     assert "Внешний контакт из HH" in alert_text
     assert "@mariahuntcode" in alert_text
     assert handoff in alert_text
-    assert "Ответы по анкете:" in result.replies[0]["reply"]
+    assert "Ответы по анкете:" not in result.replies[0]["reply"]
     assert not any(call[0] == "fill" for call in page.calls)
 
     duplicate = runner.run(send=True, limit=1)
@@ -684,10 +715,12 @@ def test_hh_chat_runner_uses_latest_incoming_dom_message_not_outgoing(tmp_path):
 
     result = runner.run(send=False, limit=1)
 
-    assert result.drafted == 1
+    assert result.blocked == 1
+    assert result.drafted == 0
     assert result.replies[0]["question"] == incoming
+    assert result.statuses == ["blocked_manual_review"]
     assert "sap_hana_checklist_honesty" in result.replies[0]["message"]
-    assert "- Kafka production: не заявляю" in result.replies[0]["reply"]
+    assert "[-] Apache Kafka - production опыт не заявляю" in result.replies[0]["reply"]
 
 
 def test_hh_chat_runner_sends_once_and_marks_state(tmp_path):
