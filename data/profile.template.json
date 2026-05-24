@@ -1,0 +1,55 @@
+{
+  "full_name": "Александр Олегович",
+  "headline": "Full-stack developer / AI automation engineer",
+  "hh_profile_url": "",
+  "website_url": "",
+  "portfolio_url": "",
+  "github_url": "",
+  "resume_text": "",
+  "target_roles": [
+    "full-stack",
+    "backend",
+    "AI automation",
+    "Telegram bots",
+    "CRM integrations"
+  ],
+  "skills": [
+    "React",
+    "Next.js",
+    "Node.js",
+    "Python",
+    "FastAPI",
+    "PostgreSQL",
+    "Telegram",
+    "CRM",
+    "LLM"
+  ],
+  "preferred_keywords": [
+    "удалённо",
+    "долгосрочно",
+    "контракт",
+    "автоматизация",
+    "дашборд"
+  ],
+  "stop_keywords": [
+    "только офис",
+    "низкая ставка",
+    "холодные звонки"
+  ],
+  "min_monthly_salary": 180000,
+  "min_hourly_rate": null,
+  "strengths": [
+    "быстро собираю рабочие MVP",
+    "делаю интеграции под бизнес-процессы",
+    "довожу до продакшена"
+  ],
+  "cases": [
+    {
+      "title": "Название кейса",
+      "task": "Что нужно было сделать",
+      "stack": ["React", "Python", "Telegram"],
+      "result": "Измеримый результат",
+      "url": ""
+    }
+  ]
+}

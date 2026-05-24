@@ -1,0 +1,51 @@
+import json
+
+from app.config import default_applicant_profile, default_candidate_profile, get_settings
+
+
+def test_profile_loader_uses_json_profile(monkeypatch, tmp_path):
+    profile_path = tmp_path / "profile.json"
+    profile_path.write_text(
+        json.dumps(
+            {
+                "full_name": "Александр Олегович",
+                "headline": "Platform Architect",
+                "portfolio_url": "https://portfolio.viably.dev",
+                "skills": ["FastAPI", "React", "Telegram"],
+                "target_roles": ["Backend Engineer"],
+                "preferred_keywords": ["удалённо"],
+                "stop_keywords": ["только офис"],
+                "min_monthly_salary": 250000,
+                "strengths": ["строю платформы"],
+                "cases": [
+                    {
+                        "title": "Viably",
+                        "stack": ["FastAPI", "Next.js"],
+                        "result": "production AI product platform",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HH_PROFILE_PATH", str(profile_path))
+
+    candidate = default_candidate_profile()
+    applicant = default_applicant_profile()
+
+    assert candidate.skills == ["FastAPI", "React", "Telegram"]
+    assert candidate.target_roles == ["Backend Engineer"]
+    assert candidate.min_monthly_salary == 250000
+    assert applicant.portfolio_url == "https://portfolio.viably.dev"
+    assert applicant.cases[0].title == "Viably"
+    assert applicant.cases[0].result == "production AI product platform"
+
+
+def test_settings_include_no_api_browser_profile_path(monkeypatch, tmp_path):
+    browser_dir = tmp_path / "hh-browser-profile"
+    monkeypatch.setenv("HH_BROWSER_USER_DATA_DIR", str(browser_dir))
+
+    settings = get_settings()
+
+    assert settings.hh_browser_user_data_dir == browser_dir

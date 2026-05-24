@@ -1,0 +1,18 @@
+{
+  "full_name": "Demo Candidate",
+  "headline": "Python Backend / AI Automation Engineer",
+  "portfolio_url": "https://example.com/portfolio",
+  "skills": ["Python", "FastAPI", "PostgreSQL", "Telegram Bot API", "LLM", "Automation"],
+  "target_roles": ["Python Backend Developer", "AI Automation Engineer"],
+  "preferred_keywords": ["remote", "automation", "backend", "AI"],
+  "stop_keywords": ["office only", "cold calls"],
+  "min_monthly_salary": 180000,
+  "strengths": ["builds backend services", "designs human-in-the-loop automation", "ships safe review flows"],
+  "cases": [
+    {
+      "title": "Job search CRM agent",
+      "stack": ["Python", "SQLite", "Telegram", "Playwright"],
+      "result": "A gated workflow for vacancy discovery, scoring, personalized draft generation and human review before external actions."
+    }
+  ]
+}
