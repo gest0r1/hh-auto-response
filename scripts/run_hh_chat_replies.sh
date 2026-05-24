@@ -37,13 +37,22 @@ if [[ "${HH_CHAT_REPLY_HEADLESS:-0}" == "1" ]]; then
   cmd+=(--headless)
 fi
 
-# Real HH chat messages are opt-in. SEND=0 only drafts and logs candidates.
+# Real HH chat messages are double-gated. SEND=0 only drafts and logs candidates.
+# HH_CHAT_REPLY_ALLOW_LIVE_SEND must be set for the specific run; cron must stay dry-run.
 if [[ "${HH_CHAT_REPLY_SEND:-0}" == "1" ]]; then
-  cmd+=(--send)
+  if [[ "${HH_CHAT_REPLY_ALLOW_LIVE_SEND:-0}" != "1" ]]; then
+    echo "HH chat replies: live send blocked; set HH_CHAT_REPLY_ALLOW_LIVE_SEND=1 for a one-off reviewed run" >&2
+  else
+    cmd+=(--send)
+  fi
 fi
 
 if [[ "${HH_CHAT_EXTERNAL_SUBMIT:-0}" == "1" ]]; then
-  cmd+=(--external-submit)
+  if [[ "${HH_CHAT_REPLY_ALLOW_LIVE_SEND:-0}" != "1" ]]; then
+    echo "HH chat replies: external submit blocked; set HH_CHAT_REPLY_ALLOW_LIVE_SEND=1 for a one-off reviewed run" >&2
+  else
+    cmd+=(--external-submit)
+  fi
 fi
 
 cmd+=("$@")

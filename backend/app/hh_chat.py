@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -781,9 +782,66 @@ def is_vacancy_point_fit_prompt(text: str) -> bool:
     has_point_context = bool(re.search(r"\b\d+\s+пункт", lowered)) or (
         "по каждому" in lowered and "пункт" in lowered
     )
+    # Do not hijack normal recruiter screening questions. The point-fit template is only for
+    # explicit vacancy/checklist fit prompts, not for concrete Django/FastAPI/salary questions.
+    has_concrete_screening = _contains_any(
+        lowered,
+        ["django", "fastapi", "drf", "модел", "миграц", "dependency injection", "websocket"],
+    ) and _contains_any(lowered, ["зарплат", "вилка", "график", "сколько", "оптимиз"])
+    if has_concrete_screening:
+        return False
     return (has_point_context and (has_fit or has_stack_context)) or (
         has_fit and has_vacancy_context and has_stack_context
     )
+
+
+def is_django_fastapi_screening_prompt(text: str) -> bool:
+    lowered = _lower(text)
+    if not lowered:
+        return False
+    has_frameworks = "django" in lowered and "fastapi" in lowered
+    has_screening = _contains_any(
+        lowered,
+        [
+            "drf",
+            "модел",
+            "миграц",
+            "websocket",
+            "dependency injection",
+            "оптимиз",
+            "orm",
+            "sql",
+        ],
+    )
+    return has_frameworks and has_screening
+
+
+def is_contract_logistics_prompt(text: str) -> bool:
+    lowered = _lower(text)
+    if not lowered:
+        return False
+    has_location = _contains_any(
+        lowered,
+        ["где вы проживаете", "где проживаете", "ваш город", "город проживания", "локац", "location"],
+    )
+    has_b2b_contract = _contains_any(lowered, ["b2b", "б2б"]) and _contains_any(
+        lowered,
+        ["контракт", "договор", "сотруднич", "оформлен", "оформление"],
+    )
+    has_legal_contract = _contains_any(lowered, ["ип", "самозан", "гпх"]) and _contains_any(
+        lowered,
+        ["контракт", "договор", "сотруднич", "оформлен", "формат"],
+    )
+    return has_location or has_b2b_contract or has_legal_contract
+
+
+def _profile_location_sentence(profile: ApplicantProfile) -> str:
+    location = normalize_text(
+        os.getenv("HH_PROFILE_LOCATION")
+        or str(getattr(profile, "location", "") or "")
+        or "Россия, часовой пояс МСК"
+    )
+    return f"Проживаю: {location}."
 
 
 def _unknown_terms(question: str, skills: list[str]) -> list[str]:
@@ -875,6 +933,34 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatRe
                 "CI/CD, scripts и health-checks/monitoring."
             ),
             reasons=["ansible_honesty"],
+        )
+
+    if is_django_fastapi_screening_prompt(lowered):
+        return HHChatReplyDraft(
+            message=_humanize_multiline(
+                "Здравствуйте! По FastAPI опыт сильнее: примерно с 2025 года, около 1,5 лет. "
+                "Делал backend/API, async endpoints, dependency injection, связку с PostgreSQL/Redis/Docker, "
+                "интеграции, OAuth/billing/deploy и production-support. WebSocket-контуры тоже были, "
+                "но не буду завышать это как главный фокус.\n\n"
+                "По Django/DRF опыт есть, но меньше, чем FastAPI: модели, миграции, DRF/API, админка и backend-задачи. "
+                "Если нужно строго по годам: FastAPI примерно 1,5 года, Django/DRF - около года проектного опыта.\n\n"
+                "Медленный запрос в Django/ORM обычно разбираю от факта: смотрю SQL/EXPLAIN, N+1, индексы, "
+                "select_related/prefetch_related, форму запроса и только потом кеширование.\n\n"
+                "График МСК+2 с 09:00 до 18:00 в целом комфортен. По вилке честно: 120 000 ₽ для меня ниже ожиданий. "
+                "Мой ориентир по full-time сейчас ближе к 300-350 тыс. ₽, но если есть другой формат, зона роста или сильная backend/AI часть, могу обсудить."
+            ),
+            reasons=["django_fastapi_screening", "salary", "format"],
+        )
+
+    if is_contract_logistics_prompt(lowered):
+        return HHChatReplyDraft(
+            message=_humanize_multiline(
+                "Здравствуйте!\n\n"
+                f"{_profile_location_sentence(profile)}\n\n"
+                "К B2B-контракту открыт, такой формат сотрудничества можно обсуждать. "
+                "По юридическим деталям готов свериться под ваш процесс оформления."
+            ),
+            reasons=["contract_logistics"],
         )
 
     if is_vacancy_point_fit_prompt(lowered):

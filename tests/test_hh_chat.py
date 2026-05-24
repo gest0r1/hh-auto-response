@@ -210,6 +210,18 @@ def test_generate_hh_chat_reply_handles_language_salary_and_sales_honestly():
     assert "salary" not in sales.reasons
     assert "stack_experience" not in sales.reasons
 
+    b2b_contract = generate_hh_chat_reply(
+        "У вас интересное резюме. Подскажите, где вы проживаете? "
+        "Открыты ли вы к сотрудничеству через B2B контракт?",
+        _profile(),
+    )
+    assert "Проживаю:" in b2b_contract.message
+    assert "B2B-контракту открыт" in b2b_contract.message
+    assert "B2B-продаж" not in b2b_contract.message
+    assert "sales manager" not in b2b_contract.message
+    assert "Python/FastAPI" not in b2b_contract.message
+    assert b2b_contract.reasons == ["contract_logistics"]
+
     commercial_ai = generate_hh_chat_reply(
         "Расскажите, пожалуйста, сколько лет вы конкретно работали в коммерческих ML/AI проектах?",
         _profile(),
@@ -375,6 +387,30 @@ def test_generate_hh_chat_reply_handles_vacancy_point_stack_fit_honestly():
     assert draft.reasons == ["vacancy_point_fit_honesty"]
     assert "stack_experience" not in draft.reasons
     assert "generic" not in draft.reasons
+
+
+def test_generate_hh_chat_reply_answers_django_fastapi_screening_instead_of_point_template():
+    draft = generate_hh_chat_reply(
+        "Есть ли у вас коммерческий опыт одновременно с Django и FastAPI? "
+        "Для Django: работа с моделями, миграциями в production, DRF? "
+        "Для FastAPI: асинхронные эндпоинты, WebSockets, dependency injection? "
+        "Как вы обычно оптимизируете медленный запрос в Django SQL или ORM? "
+        "Насколько комфортен график МСК+2 с 09:00 до 18:00? "
+        "Вилка по позиции 120 000 ₽. Подходит ли вам такой уровень?",
+        _profile(),
+    )
+
+    assert "FastAPI" in draft.message
+    assert "Django/DRF" in draft.message
+    assert "dependency injection" in draft.message
+    assert "EXPLAIN" in draft.message
+    assert "select_related/prefetch_related" in draft.message
+    assert "120 000" in draft.message
+    assert "300-350" in draft.message
+    assert "21 пункт" not in draft.message
+    assert "Go/Kafka/Elastic/Geo" not in draft.message
+    assert draft.reasons == ["django_fastapi_screening", "salary", "format"]
+    assert "vacancy_point_fit_honesty" not in draft.reasons
 
 
 def test_generate_hh_chat_reply_is_honest_about_kubernetes_and_openstack():
