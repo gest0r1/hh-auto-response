@@ -60,6 +60,10 @@ def _salary_midpoint(vacancy: Vacancy) -> int | None:
     return round(sum(values) / len(values))
 
 
+def _is_remote(vacancy: Vacancy, text: str) -> bool:
+    return any(marker in text for marker in ["remote", "удаленно", "удаленная", "удаленка", "удалённо", "удалённая"])
+
+
 def _decision(score: int) -> str:
     if score >= 85:
         return "hot"
@@ -108,7 +112,8 @@ def score_vacancy(vacancy: Vacancy, profile: CandidateProfile) -> ScoreResult:
             reasons.append(f"preferred keyword: {keyword}")
     score += min(15, preferred_hits * 5)
 
-    if any(marker in text for marker in ["remote", "удаленно", "удаленная", "удаленка", "удалённо", "удалённая"]):
+    remote = _is_remote(vacancy, text)
+    if remote:
         score += 10
         reasons.append("remote/удалёнка")
 
@@ -117,11 +122,16 @@ def score_vacancy(vacancy: Vacancy, profile: CandidateProfile) -> ScoreResult:
         if midpoint >= profile.min_monthly_salary:
             score += 10
             reasons.append(f"salary >= target: {midpoint}")
+        elif remote and midpoint >= 100_000:
+            reasons.append(f"salary flexible remote: {midpoint}")
+        elif midpoint >= 100_000:
+            score -= 5
+            penalties.append(f"salary below comfort but workable: {midpoint}")
         elif midpoint < profile.min_monthly_salary * 0.8:
-            score -= 20
+            score -= 15
             penalties.append(f"salary below target: {midpoint}")
         else:
-            score -= 8
+            score -= 5
             penalties.append(f"salary slightly below target: {midpoint}")
 
     for stop in profile.stop_keywords:

@@ -41,6 +41,7 @@ class JobSearchAgent:
             "drafts_created": 0,
             "drafts_archived": 0,
             "duplicates_skipped": 0,
+            "semantic_duplicates_skipped": 0,
             "errors": [],
         }
         learning_weights = self.repo.get_learning_weights()
@@ -63,6 +64,14 @@ class JobSearchAgent:
                 vacancy_id = self.repo.upsert_vacancy(vacancy, score)
                 stats["vacancies_saved"] += 1
                 if score.score >= draft_threshold and score.decision in {"hot", "review", "maybe"}:
+                    if self.repo.has_company_title_application(
+                        company=vacancy.company,
+                        title=vacancy.title,
+                        exclude_vacancy_id=vacancy_id,
+                    ):
+                        stats["semantic_duplicates_skipped"] += 1
+                        stats["drafts_archived"] += self.repo.archive_draft_application(vacancy_id)
+                        continue
                     generated = generate_cover_letter(
                         ResponseContext(profile=self.applicant_profile, vacancy=vacancy, score=score.score)
                     )

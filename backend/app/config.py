@@ -48,6 +48,19 @@ def _load_profile_data() -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _optional_positive_int(*values: object) -> int | None:
+    for value in values:
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            parsed = int(str(value).strip())
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0:
+            return parsed
+    return None
+
+
 def default_candidate_profile(learning_weights: dict[str, float] | None = None) -> CandidateProfile:
     data = _load_profile_data()
     if data:
@@ -101,7 +114,7 @@ def default_candidate_profile(learning_weights: dict[str, float] | None = None) 
             "bitrix24 внедренец",
             "битрикс без разработки",
         ],
-        min_monthly_salary=180000,
+        min_monthly_salary=100000,
         learning_weights=learning_weights or {},
     )
 
@@ -130,6 +143,21 @@ def default_applicant_profile() -> ApplicantProfile:
             ],
             portfolio_url=data.get("portfolio_url") or None,
             website_url=data.get("website_url") or None,
+            location=(
+                os.getenv("HH_PROFILE_LOCATION") or data.get("location") or data.get("city") or None
+            ),
+            telegram=(
+                os.getenv("HH_PROFILE_TELEGRAM")
+                or os.getenv("HH_TELEGRAM_NICK")
+                or data.get("telegram")
+                or data.get("telegram_nick")
+                or data.get("telegram_username")
+                or None
+            ),
+            age=_optional_positive_int(os.getenv("HH_PROFILE_AGE"), data.get("age")),
+            phone=(
+                os.getenv("HH_PROFILE_PHONE") or data.get("phone") or data.get("phone_number") or None
+            ),
         )
 
     # Safe placeholder until Aleksandr provides real resume/portfolio/cases.

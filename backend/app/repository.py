@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,20 @@ def _loads(value: str | None, fallback: Any) -> Any:
 
 def _row_dict(row: Any) -> dict[str, Any]:
     return dict(row) if row is not None else {}
+
+
+_ACTIVE_DUPLICATE_STATUSES = ("draft", "sent", "reply", "interview", "offer", "blocked", "rejected")
+_SPACE_RE = re.compile(r"\s+")
+
+
+def _canonical_key(value: str | None) -> str:
+    normalized = (value or "").replace("ё", "е").lower().strip()
+    normalized = _SPACE_RE.sub(" ", normalized)
+    return normalized
+
+
+def _company_title_key(company: str | None, title: str | None) -> tuple[str, str]:
+    return (_canonical_key(company), _canonical_key(title))
 
 
 def _review_item_from_row(row: Any) -> dict[str, Any]:
@@ -94,6 +109,40 @@ class CRMRepository:
             row = conn.execute("SELECT id FROM vacancies WHERE external_id = ?", (vacancy.external_id,)).fetchone()
             conn.commit()
             return int(row["id"])
+
+    def has_company_title_application(
+        self,
+        *,
+        company: str | None,
+        title: str | None,
+        exclude_vacancy_id: int | None = None,
+        statuses: tuple[str, ...] = _ACTIVE_DUPLICATE_STATUSES,
+    ) -> bool:
+        """Return True when this employer/title already has an active application.
+
+        HH sometimes publishes the same human vacancy under several vacancyId values.
+        external_id dedupe is not enough; before drafting/sending, gate by company + title.
+        """
+        target = _company_title_key(company, title)
+        if not all(target) or not statuses:
+            return False
+        placeholders = ", ".join("?" for _ in statuses)
+        params: list[Any] = list(statuses)
+        where = f"a.status IN ({placeholders})"
+        if exclude_vacancy_id is not None:
+            where += " AND v.id != ?"
+            params.append(exclude_vacancy_id)
+        with connect(self.db_path) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT v.company, v.title
+                FROM applications a
+                JOIN vacancies v ON v.id = a.vacancy_id
+                WHERE {where}
+                """,
+                tuple(params),
+            ).fetchall()
+        return any(_company_title_key(row["company"], row["title"]) == target for row in rows)
 
     def create_or_update_application(
         self,
@@ -308,7 +357,9 @@ class CRMRepository:
             params.extend(decisions)
         if not include_demo:
             where += " AND v.external_id NOT LIKE 'demo-%'"
-        params.append(limit)
+
+        if limit <= 0:
+            return []
 
         with connect(self.db_path) as conn:
             rows = conn.execute(
@@ -319,13 +370,28 @@ class CRMRepository:
                 JOIN applications a ON a.vacancy_id = v.id
                 WHERE {where}
                 ORDER BY v.score DESC, v.updated_at DESC
-                LIMIT ?
                 """,
                 tuple(params),
             ).fetchall()
         queue: list[dict[str, Any]] = []
+        seen_signatures: set[tuple[str, str]] = set()
+        handled_statuses = tuple(status for status in _ACTIVE_DUPLICATE_STATUSES if status != "draft")
         for row in rows:
-            queue.append(_review_item_from_row(row))
+            item = _review_item_from_row(row)
+            signature = _company_title_key(str(item.get("company") or ""), str(item.get("title") or ""))
+            if signature in seen_signatures:
+                continue
+            if self.has_company_title_application(
+                company=str(item.get("company") or ""),
+                title=str(item.get("title") or ""),
+                exclude_vacancy_id=int(item["id"]),
+                statuses=handled_statuses,
+            ):
+                continue
+            seen_signatures.add(signature)
+            queue.append(item)
+            if len(queue) >= limit:
+                break
         return queue
 
     def application_review_item(self, application_id: int) -> dict[str, Any] | None:

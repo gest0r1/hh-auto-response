@@ -61,3 +61,32 @@ def test_stop_keywords_and_low_salary_reduce_score():
     assert result.score < 55
     assert result.decision == "archive"
     assert any("стоп" in reason.lower() for reason in result.reasons)
+
+
+def test_remote_100_200_salary_is_not_hard_rejected_when_job_is_relevant():
+    profile = CandidateProfile(
+        target_roles=["backend"],
+        skills=["Python", "FastAPI", "PostgreSQL", "Docker", "API"],
+        preferred_keywords=["удаленно"],
+        stop_keywords=[],
+        min_monthly_salary=300000,
+    )
+    vacancy = Vacancy(
+        external_id="hh-flex-salary",
+        title="Python Backend разработчик",
+        company="Remote Product",
+        description="Удаленно. Backend API, FastAPI, PostgreSQL, Docker. Возможен рост по роли и оплате.",
+        url="https://hh.ru/vacancy/flex",
+        salary_from=100000,
+        salary_to=200000,
+        currency="RUR",
+        schedule="remote",
+        employment="full",
+        skills=["Python", "FastAPI", "PostgreSQL", "Docker"],
+    )
+
+    result = score_vacancy(vacancy, profile)
+
+    assert result.decision != "archive"
+    assert any("salary flexible remote" in reason for reason in result.reasons)
+    assert not any("salary below target" in penalty for penalty in result.penalties)

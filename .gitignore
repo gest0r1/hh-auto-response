@@ -10,6 +10,7 @@ data/review_queue_today.md
 data/hh_chat_reply_state.json
 data/hh_telegram_*
 data/hh-browser-profile/
+data/google-manual-chrome-profile/
 data/*screenshot*.pdf
 __pycache__/
 .pytest_cache/

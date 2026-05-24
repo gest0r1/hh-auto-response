@@ -39,6 +39,15 @@ def _env_flag(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _hh_chat_live_send_allowed() -> bool:
+    return _env_flag("HH_CHAT_REPLY_SEND") and _env_flag("HH_CHAT_REPLY_ALLOW_LIVE_SEND")
+
+
+def _hh_chat_external_submit_enabled(args: argparse.Namespace) -> bool:
+    requested = bool(args.external_submit or _env_flag("HH_CHAT_EXTERNAL_SUBMIT"))
+    return requested and _hh_chat_live_send_allowed()
+
+
 def _coerce_chat_id(value: str) -> int | str:
     stripped = value.strip()
     return int(stripped) if stripped.lstrip("-").isdigit() else stripped
@@ -310,7 +319,7 @@ def cmd_reply_hh_chats(args: argparse.Namespace) -> None:
     user_data_dir = args.user_data_dir or settings.hh_browser_user_data_dir
     state = HHChatReplyState(args.state_file)
     profile = default_applicant_profile()
-    external_submit = bool(args.external_submit or _env_flag("HH_CHAT_EXTERNAL_SUBMIT"))
+    external_submit = _hh_chat_external_submit_enabled(args)
     alert_notifier = _build_hh_chat_alert_notifier()
     try:
         runner = HHChatRunner.launch(
@@ -468,7 +477,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--external-submit",
         action="store_true",
         help=(
-            "Allow safe Google Form submission after HH_CHAT_EXTERNAL_SUBMIT gate. "
+            "Allow safe Google Form submission after HH_CHAT_REPLY_SEND and "
+            "HH_CHAT_REPLY_ALLOW_LIVE_SEND gates. "
             "Without it Google Forms may be filled but not submitted."
         ),
     )

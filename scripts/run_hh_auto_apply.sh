@@ -62,10 +62,31 @@ if [[ "${HH_AUTO_APPLY_INCLUDE_DEMO:-0}" == "1" ]]; then
   cmd+=(--include-demo)
 fi
 
-# Real HH submit clicks are opt-in. Keep this 0 for dry-run/form-fill checks.
-if [[ "${HH_AUTO_APPLY_SEND:-0}" == "1" ]]; then
+caller_args=()
+blocked_live_send=0
+for arg in "$@"; do
+  case "$arg" in
+    --send|--send=*)
+      if [[ "${HH_AUTO_APPLY_SEND:-0}" != "1" || "${HH_AUTO_APPLY_ALLOW_LIVE_SEND:-0}" != "1" ]]; then
+        blocked_live_send=1
+      fi
+      ;;
+    *)
+      caller_args+=("$arg")
+      ;;
+  esac
+done
+
+# Real HH submit clicks are double-gated. Default cron/daily runs must only dry-run/fill.
+if [[ "${HH_AUTO_APPLY_SEND:-0}" == "1" && "${HH_AUTO_APPLY_ALLOW_LIVE_SEND:-0}" == "1" ]]; then
   cmd+=(--send)
+elif [[ "${HH_AUTO_APPLY_SEND:-0}" == "1" ]]; then
+  blocked_live_send=1
 fi
 
-cmd+=("$@")
+if [[ "$blocked_live_send" == "1" ]]; then
+  echo "HH auto-apply: live send blocked (--send); set HH_AUTO_APPLY_SEND=1 and HH_AUTO_APPLY_ALLOW_LIVE_SEND=1" >&2
+fi
+
+cmd+=("${caller_args[@]}")
 exec "${cmd[@]}"

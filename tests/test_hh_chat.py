@@ -2,6 +2,7 @@ from app.hh_chat import (
     ExternalFormResult,
     HHChatReplyState,
     HHChatRunner,
+    answer_google_form_question,
     extract_external_targets,
     extract_google_form_links,
     format_external_handoff_alert,
@@ -190,14 +191,16 @@ def test_generate_hh_chat_reply_handles_language_salary_and_sales_honestly():
     assert "english_honesty" in english.reasons
 
     salary = generate_hh_chat_reply("Какую заработную плату вы хотели бы иметь на данной должности?", _profile())
-    assert "300-350" in salary.message
+    assert "100-200" in salary.message
+    assert "не жесткий порог" in salary.message
     assert "salary" in salary.reasons
 
     income = generate_hh_chat_reply(
         "Добрый день! Пожалуйста,укажите уровень дохода на который вы ориентируетесь.Спасибо!",
         _profile(),
     )
-    assert "300-350" in income.message
+    assert "100-200" in income.message
+    assert "не жесткий порог" in income.message
     assert income.reasons == ["salary"]
     assert "generic" not in income.reasons
 
@@ -230,6 +233,25 @@ def test_generate_hh_chat_reply_handles_language_salary_and_sales_honestly():
     assert "примерно 1,5 года" in commercial_ai.message
     assert "commercial_ai_years_honesty" in commercial_ai.reasons
     assert "generic" not in commercial_ai.reasons
+
+
+def test_answer_google_form_question_uses_confirmed_contact_age_and_flexible_salary():
+    profile = ApplicantProfile(
+        full_name="Александр Олегович",
+        headline="Python Backend Engineer",
+        age=25,
+        phone="+79106053173",
+        location="Обнинск",
+        telegram="@ne_stoit_togo",
+    )
+
+    assert answer_google_form_question("Возраст", profile) == "25"
+    assert answer_google_form_question("Телефон для связи", profile) == "+79106053173"
+    assert answer_google_form_question("Telegram", profile) == "@ne_stoit_togo"
+    salary = answer_google_form_question("Зарплатные ожидания", profile)
+    assert salary is not None
+    assert "100-200" in salary
+    assert "не жесткий порог" in salary
 
 
 def test_generate_hh_chat_reply_acknowledges_questionnaire_without_claiming_completion():
@@ -267,12 +289,34 @@ def test_generate_hh_chat_reply_handles_sap_hana_checklist_honestly():
     assert "3) ЗП" in draft.message
     assert "4) Локация - [указать город/часовой пояс]" in draft.message
     assert "5) Telegram - [указать Telegram-ник]" in draft.message
-    assert "300-350" in draft.message
-    assert "350-450" in draft.message
+    assert "100-200" in draft.message
+    assert "не жесткий порог" in draft.message
     assert "Telegram-ник в профиле не указан" not in draft.message
     assert "Локация: удаленно" not in draft.message
     assert "sap_hana_checklist_honesty" in draft.reasons
     assert "manual_required" in draft.reasons
+
+
+def test_generate_hh_chat_reply_handles_sap_hana_checklist_with_confirmed_contacts():
+    profile = _profile()
+    profile = ApplicantProfile(
+        headline=profile.headline,
+        strengths=profile.strengths,
+        cases=profile.cases,
+        portfolio_url=profile.portfolio_url,
+        location="Обнинск",
+        telegram="@ne_stoit_togo",
+    )
+    draft = generate_hh_chat_reply(
+        "Ответьте чек-листом: SAP HANA trace files, Python/Go/Java/C++/Rust, "
+        "SAP HANA datasource, Iceberg/Paimon, Kafka, data engineering/SRE, ИП/СЗ, "
+        "аутстафф, зарплата, локация, Telegram.",
+        profile,
+    )
+
+    assert "4) Локация - Обнинск" in draft.message
+    assert "5) Telegram - @ne_stoit_togo" in draft.message
+    assert "manual_required" not in draft.reasons
 
 
 def test_generate_hh_chat_reply_handles_engineering_discipline():
@@ -352,7 +396,8 @@ def test_generate_hh_chat_reply_is_honest_about_unverified_stack_and_salary():
         _profile(),
     )
 
-    assert "300-350" in draft.message
+    assert "100-200" in draft.message
+    assert "не жесткий порог" in draft.message
     assert "Kubernetes" in draft.message
     assert "не буду придумывать" in draft.message
     assert "—" not in draft.message
@@ -414,7 +459,8 @@ def test_generate_hh_chat_reply_answers_django_fastapi_screening_instead_of_poin
     assert "EXPLAIN" in draft.message
     assert "select_related/prefetch_related" in draft.message
     assert "120 000" in draft.message
-    assert "300-350" in draft.message
+    assert "100-200" in draft.message
+    assert "не жесткий порог" in draft.message
     assert "21 пункт" not in draft.message
     assert "Go/Kafka/Elastic/Geo" not in draft.message
     assert draft.reasons == ["django_fastapi_screening", "salary", "format"]

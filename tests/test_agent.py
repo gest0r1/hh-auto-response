@@ -24,6 +24,37 @@ class FakeHHClient:
         ]
 
 
+class DuplicateTitleHHClient:
+    def search_vacancies(self, *, text: str, per_page: int = 20, page: int = 0):
+        assert text
+        return [
+            Vacancy(
+                external_id="hh-dup-agent-1",
+                title="AI-разработчик (Python) Junior / Middle",
+                company="Social Media Holding",
+                description="Удалённо. Python, AI, FastAPI.",
+                url="https://hh.ru/vacancy/dup-agent-1",
+                salary_from=230000,
+                salary_to=300000,
+                currency="RUR",
+                schedule="remote",
+                skills=["Python", "FastAPI", "AI"],
+            ),
+            Vacancy(
+                external_id="hh-dup-agent-2",
+                title="AI-разработчик (Python) Junior / Middle",
+                company="Social Media Holding",
+                description="Удалённо. Python, AI, FastAPI. Duplicate vacancyId.",
+                url="https://hh.ru/vacancy/dup-agent-2",
+                salary_from=230000,
+                salary_to=300000,
+                currency="RUR",
+                schedule="remote",
+                skills=["Python", "FastAPI", "AI"],
+            ),
+        ]
+
+
 class RescoreHHClient:
     def __init__(self, vacancy: Vacancy) -> None:
         self.vacancy = vacancy
@@ -61,6 +92,30 @@ def test_agent_search_scores_and_creates_drafts(tmp_path):
     assert cover_letter.startswith("Здравствуйте!")
     assert "Здравствуйте, AgentCo" not in cover_letter
     assert "React Python CRM developer" in cover_letter
+
+
+def test_agent_skips_same_company_title_duplicates_even_with_different_hh_ids(tmp_path):
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    candidate = CandidateProfile(
+        target_roles=["ai backend"],
+        skills=["Python", "FastAPI", "AI"],
+        preferred_keywords=["удалённо", "удаленно"],
+        min_monthly_salary=180000,
+    )
+    applicant = ApplicantProfile(full_name="Александр Олегович")
+    agent = JobSearchAgent(
+        repo=repo,
+        hh_client=DuplicateTitleHHClient(),
+        candidate_profile=candidate,
+        applicant_profile=applicant,
+    )
+
+    result = agent.run_once(queries=["AI Python"], per_query=10, draft_threshold=80)
+
+    assert result["vacancies_seen"] == 2
+    assert result["drafts_created"] == 1
+    assert result["semantic_duplicates_skipped"] == 1
+    assert [row["external_id"] for row in repo.review_queue(min_score=80)] == ["hh-dup-agent-1"]
 
 
 def test_agent_archives_stale_draft_when_rescore_drops_below_threshold(tmp_path):

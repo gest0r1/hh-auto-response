@@ -867,6 +867,7 @@ def _profile_location(profile: ApplicantProfile) -> str | None:
     value = normalize_text(
         os.getenv("HH_PROFILE_LOCATION")
         or str(getattr(profile, "location", "") or "")
+        or str(getattr(profile, "city", "") or "")
         or ""
     )
     return value or None
@@ -923,7 +924,7 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatRe
             "Условия:\n"
             "1) ИП/СЗ - можно обсуждать.\n"
             "2) Аутстафф - можно обсуждать.\n"
-            "3) ЗП - ориентир full-time 300-350 тыс. ₽; для сильной backend/fullstack/AI-инфраструктуры 350-450 тыс. ₽.\n"
+            f"3) ЗП - {_salary_positioning_text()}\n"
             f"4) Локация - {location or '[указать город/часовой пояс]'}.\n"
             f"5) Telegram - {telegram or '[указать Telegram-ник]'} .\n\n"
             "Если по роли критичны именно SAP HANA/Iceberg/Paimon/Kafka в production, честно скажу: я не самый точный кандидат. "
@@ -955,8 +956,10 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatRe
                 "Если нужно строго по годам: FastAPI примерно 1,5 года, Django/DRF - около года проектного опыта.\n\n"
                 "Медленный запрос в Django/ORM обычно разбираю от факта: смотрю SQL/EXPLAIN, N+1, индексы, "
                 "select_related/prefetch_related, форму запроса и только потом кеширование.\n\n"
-                "График МСК+2 с 09:00 до 18:00 в целом комфортен. По вилке честно: 120 000 ₽ для меня ниже ожиданий. "
-                "Мой ориентир по full-time сейчас ближе к 300-350 тыс. ₽, но если есть другой формат, зона роста или сильная backend/AI часть, могу обсудить."
+                "График МСК+2 с 09:00 до 18:00 в целом комфортен. По вилке: "
+                "120 000 ₽ для удаленного формата могу обсудить, особенно если есть быстрый старт, "
+                "стабильность или понятный рост. В целом сейчас рассматриваю удаленные варианты от 100-200 тыс. ₽. "
+                "300 тыс. ₽+ - комфортный ориентир, не жесткий порог."
             ),
             reasons=["django_fastapi_screening", "salary", "format"],
         )
@@ -1032,11 +1035,7 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatRe
         lowered,
         ["зарплат", "заработн", "доход", "ожидания", "вилка", "ставка", "компенсац", "оплат"],
     ):
-        sentences.append(
-            "По ожиданиям: для full-time обычно смотрю 300-350 тыс. ₽, "
-            "для сильной backend/fullstack/AI-инфраструктуры 350-450 тыс. ₽. "
-            "Если роль ближе к architect/lead с зоной ответственности, вилку обсуждаю отдельно."
-        )
+        sentences.append("По ожиданиям: " + _salary_positioning_text())
         reasons.append("salary")
 
     if _contains_any(lowered, ["postgresql", "postgres", "explain", "partition", "индекс"]):
@@ -1179,9 +1178,10 @@ def _strip_greeting(text: str) -> str:
 
 def _salary_positioning_text() -> str:
     return (
-        "Для full-time обычно смотрю 300-350 тыс. ₽, "
-        "для сильной backend/fullstack/AI-инфраструктуры 350-450 тыс. ₽. "
-        "Если роль ближе к architect/lead с зоной ответственности, вилку обсуждаю отдельно."
+        "Сейчас приоритет - удаленная работа и быстрый старт. "
+        "Готов рассматривать варианты от 100-200 тыс. ₽, если задачи нормальные, "
+        "есть стабильность или понятный потенциал роста. "
+        "300 тыс. ₽+ - комфортный ориентир, но не жесткий порог."
     )
 
 
@@ -1218,7 +1218,18 @@ def answer_google_form_question(label: str, profile: ApplicantProfile) -> str | 
         return None
 
     if _contains_any(lowered, ["фио", "имя и фамилия", "ваше имя", "как вас зовут"]):
+        if "возраст" in lowered or "лет" in lowered:
+            age = getattr(profile, "age", None)
+            return f"{profile.full_name}, {age} лет" if age else profile.full_name
         return profile.full_name
+
+    if _contains_any(lowered, ["возраст", "сколько лет"]):
+        age = getattr(profile, "age", None)
+        return str(age) if age else None
+
+    if _contains_any(lowered, ["телефон", "номер", "phone", "whatsapp", "ватсап"]):
+        phone = normalize_text(str(getattr(profile, "phone", "") or ""))
+        return phone or None
 
     if _contains_any(lowered, ["telegram", "телеграм", "tg", "ник"]):
         telegram = _telegram_nick(profile)

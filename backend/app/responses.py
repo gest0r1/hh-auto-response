@@ -52,6 +52,10 @@ class ApplicantProfile:
     cases: list[CaseStudy] = field(default_factory=list)
     portfolio_url: str | None = None
     website_url: str | None = None
+    location: str | None = None
+    telegram: str | None = None
+    age: int | None = None
+    phone: str | None = None
 
 
 @dataclass(slots=True)

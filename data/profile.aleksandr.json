@@ -899,13 +899,26 @@
     "appsec",
     "security operations"
   ],
-  "min_monthly_salary": 300000,
+  "min_monthly_salary": 100000,
   "salary_positioning": {
     "active_hh_resume": "Архитектор высоконагруженных AI-систем / AI Solutions Architect",
     "active_hh_resume_salary_rub": 300000,
-    "mass_outreach_monthly_rub": "300000-350000",
-    "strong_fullstack_backend_ai_monthly_rub": "350000-450000",
+    "mass_outreach_monthly_rub": "100000-200000 для удаленных стабильных вариантов с быстрым стартом; 300000+ только комфортный ориентир для переговоров, не фильтр и не hard floor",
+    "strong_fullstack_backend_ai_monthly_rub": "300000+ как комфортный ориентир для сильных совпадений, не минимальный порог",
     "architect_lead_ownership_monthly_rub": "500000-550000+",
-    "note": "650000 ₽ не использовать как дефолт для массовых откликов; только как якорь для редких CTO/Head/Architect scope."
-  }
+    "note": "Не использовать 300000+ как дефолт или нижнюю границу массовых откликов. 650000 ₽ не использовать как дефолт; только как якорь для редких CTO/Head/Architect scope."
+  },
+  "location": "Обнинск",
+  "city": "Обнинск",
+  "telegram": "@ne_stoit_togo",
+  "age": 25,
+  "phone": "+79106053173",
+  "phone_number": "+79106053173",
+  "salary_expectations": {
+    "critical_mode": true,
+    "remote_minimum_rub": 100000,
+    "comfortable_rub": "200000-300000+",
+    "note": "300000 не жесткий порог. В текущей ситуации рассматривать удаленные варианты 100000-200000 ₽, если есть стабильность, быстрый старт или потенциал роста."
+  },
+  "salary_strategy": "Сейчас приоритет - получить удаленную работу и деньги. Не отказывать работодателям из-за вилки 100000-200000 ₽; 300000 ₽ использовать как комфортный ориентир, не как фильтр."
 }

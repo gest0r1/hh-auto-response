@@ -37,23 +37,57 @@ if [[ "${HH_CHAT_REPLY_HEADLESS:-0}" == "1" ]]; then
   cmd+=(--headless)
 fi
 
-# Real HH chat messages are double-gated. SEND=0 only drafts and logs candidates.
-# HH_CHAT_REPLY_ALLOW_LIVE_SEND must be set for the specific run; cron must stay dry-run.
-if [[ "${HH_CHAT_REPLY_SEND:-0}" == "1" ]]; then
-  if [[ "${HH_CHAT_REPLY_ALLOW_LIVE_SEND:-0}" != "1" ]]; then
-    echo "HH chat replies: live send blocked; set HH_CHAT_REPLY_ALLOW_LIVE_SEND=1 for a one-off reviewed run" >&2
-  else
-    cmd+=(--send)
-  fi
+caller_args=()
+blocked_live_send=0
+blocked_external_submit=0
+caller_external_submit=0
+live_send_allowed=0
+if [[ "${HH_CHAT_REPLY_SEND:-0}" == "1" && "${HH_CHAT_REPLY_ALLOW_LIVE_SEND:-0}" == "1" ]]; then
+  live_send_allowed=1
 fi
 
-if [[ "${HH_CHAT_EXTERNAL_SUBMIT:-0}" == "1" ]]; then
-  if [[ "${HH_CHAT_REPLY_ALLOW_LIVE_SEND:-0}" != "1" ]]; then
-    echo "HH chat replies: external submit blocked; set HH_CHAT_REPLY_ALLOW_LIVE_SEND=1 for a one-off reviewed run" >&2
+for arg in "$@"; do
+  case "$arg" in
+    --send|--send=*)
+      if [[ "$live_send_allowed" != "1" ]]; then
+        blocked_live_send=1
+      fi
+      ;;
+    --external-submit|--external-submit=*)
+      if [[ "$live_send_allowed" != "1" ]]; then
+        blocked_external_submit=1
+      else
+        caller_external_submit=1
+      fi
+      ;;
+    *)
+      caller_args+=("$arg")
+      ;;
+  esac
+done
+
+# Real HH chat messages are double-gated. SEND=0 only drafts and logs candidates.
+# HH_CHAT_REPLY_ALLOW_LIVE_SEND must be set for the specific run; cron must stay dry-run.
+if [[ "$live_send_allowed" == "1" ]]; then
+  cmd+=(--send)
+elif [[ "${HH_CHAT_REPLY_SEND:-0}" == "1" ]]; then
+  blocked_live_send=1
+fi
+
+if [[ "${HH_CHAT_EXTERNAL_SUBMIT:-0}" == "1" || "$caller_external_submit" == "1" ]]; then
+  if [[ "$live_send_allowed" != "1" ]]; then
+    blocked_external_submit=1
   else
     cmd+=(--external-submit)
   fi
 fi
 
-cmd+=("$@")
+if [[ "$blocked_live_send" == "1" ]]; then
+  echo "HH chat replies: live send blocked (--send); set HH_CHAT_REPLY_SEND=1 and HH_CHAT_REPLY_ALLOW_LIVE_SEND=1" >&2
+fi
+if [[ "$blocked_external_submit" == "1" ]]; then
+  echo "HH chat replies: external submit blocked (--external-submit); set HH_CHAT_REPLY_SEND=1 and HH_CHAT_REPLY_ALLOW_LIVE_SEND=1" >&2
+fi
+
+cmd+=("${caller_args[@]}")
 exec "${cmd[@]}"

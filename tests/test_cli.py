@@ -4,7 +4,7 @@ from app.cli import (
     _is_configured_hh_telegram_chat_id,
     build_parser,
 )
-from app.hh_chat import ExternalHandoffAlert, ExternalTarget, PreparedExternalResponse
+from app.hh_chat import ExternalHandoffAlert, ExternalTarget, HHChatRunResult, PreparedExternalResponse
 
 
 def test_cli_has_no_api_public_search_command():
@@ -118,6 +118,59 @@ def test_cli_parses_hh_chat_external_submit_flag():
 
     assert args.external_submit is True
     assert callable(args.func)
+
+
+def test_reply_hh_chats_external_submit_env_still_requires_live_allow(monkeypatch, tmp_path):
+    class FakeRunner:
+        run_kwargs = {}
+        page = object()
+
+        @classmethod
+        def launch(cls, **_kwargs):
+            return cls()
+
+        def run(self, **kwargs):
+            type(self).run_kwargs = kwargs
+            return HHChatRunResult(
+                scanned=0,
+                candidates=0,
+                sent=0,
+                drafted=0,
+                skipped=0,
+                blocked=0,
+                send_enabled=kwargs["send"],
+                statuses=[],
+                replies=[],
+                external_submit_enabled=kwargs["external_submit"],
+            )
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr("app.cli.HHChatRunner", FakeRunner)
+    monkeypatch.setattr("app.cli.ConservativeGoogleFormRunner", lambda **_kwargs: object())
+    monkeypatch.setenv("HH_CRM_DB_PATH", str(tmp_path / "crm.sqlite3"))
+    monkeypatch.setenv("HH_CHAT_EXTERNAL_SUBMIT", "1")
+    monkeypatch.setenv("HH_CHAT_REPLY_SEND", "1")
+    monkeypatch.delenv("HH_CHAT_REPLY_ALLOW_LIVE_SEND", raising=False)
+    monkeypatch.delenv("HH_TELEGRAM_BOT_TOKEN", raising=False)
+    args = build_parser().parse_args(
+        [
+            "reply-hh-chats",
+            "--send",
+            "--state-file",
+            str(tmp_path / "state.json"),
+        ]
+    )
+
+    args.func(args)
+
+    assert FakeRunner.run_kwargs["external_submit"] is False
+
+    monkeypatch.setenv("HH_CHAT_REPLY_ALLOW_LIVE_SEND", "1")
+    args.func(args)
+
+    assert FakeRunner.run_kwargs["external_submit"] is True
 
 
 def test_hh_telegram_chat_id_validation_rejects_placeholders():

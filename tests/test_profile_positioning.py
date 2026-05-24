@@ -16,6 +16,17 @@ def test_aleksandr_profile_keeps_python_backend_as_primary_axis():
     ]
     assert "Python Backend" in profile["skills"][:5]
     assert profile["strengths"][0].startswith("основной профиль - Python backend")
+    assert profile["location"] == "Обнинск"
+    assert profile["city"] == "Обнинск"
+    assert profile["telegram"] == "@ne_stoit_togo"
+    assert profile["age"] == 25
+    assert profile["phone"] == "+79106053173"
+    assert profile["min_monthly_salary"] == 100000
+    assert profile["salary_expectations"]["critical_mode"] is True
+    profile_text = json.dumps(profile, ensure_ascii=False)
+    assert "300000-350000" not in profile_text
+    assert "300000+ только комфортный ориентир" in profile["salary_positioning"]["mass_outreach_monthly_rub"]
+    assert "не как фильтр" in profile["salary_strategy"]
 
 
 def test_daily_auto_apply_queries_include_python_backend_without_generic_frontend_spread():
@@ -26,9 +37,21 @@ def test_daily_auto_apply_queries_include_python_backend_without_generic_fronten
     assert "Backend Python developer" in script
     assert "AI agents developer" in script
     assert "LLM Backend Engineer" in script
+    assert 'HH_AUTO_APPLY_DRAFT_THRESHOLD="${HH_AUTO_APPLY_DRAFT_THRESHOLD:-80}"' in script
+    assert 'HH_AUTO_APPLY_MIN_SCORE="${HH_AUTO_APPLY_MIN_SCORE:-80}"' in script
     assert "React developer" not in script
     assert "Node.js developer" not in script
     assert "JavaScript developer" not in script
+
+
+def test_hh_auto_apply_daily_runner_is_dry_run_by_default_and_double_gated():
+    daily = (ROOT / "scripts/run_hh_auto_apply_daily.sh").read_text(encoding="utf-8")
+    runner = (ROOT / "scripts/run_hh_auto_apply.sh").read_text(encoding="utf-8")
+
+    assert 'HH_AUTO_APPLY_SEND="${HH_AUTO_APPLY_SEND:-0}"' in daily
+    assert 'HH_AUTO_APPLY_ALLOW_LIVE_SEND="${HH_AUTO_APPLY_ALLOW_LIVE_SEND:-0}"' in daily
+    assert "HH_AUTO_APPLY_ALLOW_LIVE_SEND" in runner
+    assert "live send blocked" in runner
 
 
 def test_hh_chat_hourly_runner_is_dry_run_by_default_and_double_gated():

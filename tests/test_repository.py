@@ -191,6 +191,111 @@ def test_create_or_update_application_does_not_resurrect_sent_draft(tmp_path):
     assert "Первый черновик" in summary["top_vacancies"][0]["cover_letter"]
 
 
+def test_repository_review_queue_hides_semantic_duplicate_drafts(tmp_path):
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    first_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-dup-1",
+            title="AI-разработчик (Python) Junior / Middle",
+            company="Social Media Holding",
+            description="Python AI",
+            url="https://hh.ru/vacancy/dup-1",
+        ),
+        ScoreResult(score=91, decision="hot", reasons=["python"]),
+    )
+    second_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-dup-2",
+            title="AI-разработчик (Python) Junior / Middle",
+            company="Social Media Holding",
+            description="Python AI duplicate",
+            url="https://hh.ru/vacancy/dup-2",
+        ),
+        ScoreResult(score=90, decision="hot", reasons=["python"]),
+    )
+    repo.create_or_update_application(first_id, cover_letter="Здравствуйте! 1", status="draft", score_at_apply=91)
+    repo.create_or_update_application(second_id, cover_letter="Здравствуйте! 2", status="draft", score_at_apply=90)
+
+    queue = repo.review_queue(min_score=80, limit=10)
+
+    assert len(queue) == 1
+    assert queue[0]["external_id"] == "hh-dup-1"
+
+
+def test_repository_review_queue_duplicate_filtering_does_not_starve_later_valid_rows(tmp_path):
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    first_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-starve-dup-1",
+            title="Python Backend Engineer",
+            company="DuplicateCo",
+            description="Python backend",
+            url="https://hh.ru/vacancy/starve-dup-1",
+        ),
+        ScoreResult(score=100, decision="hot", reasons=["python"]),
+    )
+    second_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-starve-dup-2",
+            title="Python Backend Engineer",
+            company="DuplicateCo",
+            description="Python backend duplicate",
+            url="https://hh.ru/vacancy/starve-dup-2",
+        ),
+        ScoreResult(score=99, decision="hot", reasons=["python"]),
+    )
+    valid_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-starve-valid",
+            title="FastAPI Platform Engineer",
+            company="ValidCo",
+            description="FastAPI backend",
+            url="https://hh.ru/vacancy/starve-valid",
+        ),
+        ScoreResult(score=98, decision="hot", reasons=["fastapi"]),
+    )
+    repo.create_or_update_application(first_id, cover_letter="Здравствуйте! 1", status="draft", score_at_apply=100)
+    repo.create_or_update_application(second_id, cover_letter="Здравствуйте! 2", status="draft", score_at_apply=99)
+    repo.create_or_update_application(valid_id, cover_letter="Здравствуйте! 3", status="draft", score_at_apply=98)
+
+    queue = repo.review_queue(min_score=80, limit=2)
+
+    assert [row["external_id"] for row in queue] == ["hh-starve-dup-1", "hh-starve-valid"]
+
+
+def test_repository_review_queue_hides_draft_when_same_company_title_was_sent(tmp_path):
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    sent_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-dup-sent-1",
+            title="Full-Stack разработчик",
+            company="Kahrs Logistic and Sales LLC",
+            description="Fullstack",
+            url="https://hh.ru/vacancy/dup-sent-1",
+        ),
+        ScoreResult(score=91, decision="hot", reasons=["fullstack"]),
+    )
+    draft_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-dup-sent-2",
+            title="Full-Stack разработчик",
+            company="Kahrs Logistic and Sales LLC",
+            description="Fullstack duplicate",
+            url="https://hh.ru/vacancy/dup-sent-2",
+        ),
+        ScoreResult(score=90, decision="hot", reasons=["fullstack"]),
+    )
+    repo.create_or_update_application(sent_id, cover_letter="Здравствуйте!", status="sent", score_at_apply=91)
+    repo.create_or_update_application(draft_id, cover_letter="Здравствуйте!", status="draft", score_at_apply=90)
+
+    assert repo.has_company_title_application(
+        company="Kahrs Logistic and Sales LLC",
+        title="Full-Stack разработчик",
+        exclude_vacancy_id=draft_id,
+    ) is True
+    assert repo.review_queue(min_score=80, limit=10) == []
+
+
 def test_repository_review_queue_includes_draft_and_no_api_apply_url(tmp_path):
     repo = CRMRepository(tmp_path / "crm.sqlite3")
     vacancy = Vacancy(
