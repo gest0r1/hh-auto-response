@@ -1,3 +1,5 @@
+import pytest
+
 from app.hh_chat import (
     ExternalFormResult,
     HHChatReplyState,
@@ -12,6 +14,7 @@ from app.hh_chat import (
     is_google_form_url,
     is_reply_candidate,
     preview_from_raw,
+    should_deep_scan_preview,
 )
 from app.responses import ApplicantProfile, CaseStudy
 
@@ -116,6 +119,23 @@ class FakeNotifier:
         self.alerts.append(alert)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_hh_profile_env(monkeypatch):
+    for key in (
+        "HH_PROFILE_LOCATION",
+        "HH_PROFILE_CITY",
+        "HH_PROFILE_TELEGRAM",
+        "HH_PROFILE_TELEGRAM_NICK",
+        "HH_PROFILE_TELEGRAM_USERNAME",
+        "HH_PROFILE_PHONE",
+        "HH_CHAT_REPLY_ANSWER_LOW_FIT",
+        "HH_CHAT_REPLY_ALL_TITLES",
+        "HH_CHAT_REPLY_ACK_EXTERNAL_HANDOFF",
+        "HH_CHAT_REPLY_ALL_MESSAGES",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
 def _profile():
     return ApplicantProfile(
         headline="AI Agent Systems / AgentOps / Full-stack AI Infrastructure",
@@ -129,6 +149,15 @@ def _profile():
         ],
         portfolio_url="https://portfolio.viably.dev",
     )
+
+
+QA_AUTOMATION_AVAILABILITY_QUESTION = (
+    "Здравствуйте, Александр. Я ассистент рекрутера на базе AI и благодарю за ваш отклик "
+    "на вакансию AQA-инженера. Мы ищем специалиста с опытом коммерческого тестирования "
+    "Web и Mobile приложений от трех лет, глубокими знаниями TypeScript или Python, "
+    "а также практическим опытом работы с Playwright, Appium и CI/CD. Готовы ли вы "
+    "рассмотреть эту вакансию и обсудить детали вашего опыта прямо сейчас в чате?"
+)
 
 
 def test_hh_chat_candidate_detection_skips_chips_and_closed_statuses():
@@ -170,6 +199,60 @@ def test_hh_chat_preview_ignores_unread_badge_line():
     assert is_reply_candidate(preview.preview) is True
 
 
+def test_hh_chat_reminder_preview_triggers_deep_scan_but_not_generic_reply():
+    preview = preview_from_raw(
+        {
+            "href": "https://hh.ru/chat/5383000000",
+            "dataQa": "chatik-open-chat-5383000000",
+            "text": (
+                "Senior AI / Full-Stack Developer\n"
+                "Clean Planet\n"
+                "Здравствуйте, Александр! Напоминаю про мой вопрос. "
+                "Если найдёте время для ответа, буду благодарен."
+            ),
+        }
+    )
+
+    assert preview is not None
+    assert is_reply_candidate(preview.preview) is False
+    assert should_deep_scan_preview(preview.preview) is True
+
+    page = FakePage()
+    page.preview_rows = [
+        {
+            "href": "https://hh.ru/chat/5383000000",
+            "dataQa": "chatik-open-chat-5383000000",
+            "text": (
+                "Senior AI / Full-Stack Developer\n"
+                "Clean Planet\n"
+                "Здравствуйте, Александр! Напоминаю про мой вопрос. "
+                "Если найдёте время для ответа, буду благодарен."
+            ),
+        }
+    ]
+    page.chat_messages = [
+        {
+            "text": "Расскажите, пожалуйста, есть ли у вас опыт разработки на Node.js в реальных продакшн-проектах?",
+            "isMine": False,
+        },
+        {
+            "text": "Здравствуйте, Александр! Напоминаю про мой вопрос. Если найдёте время для ответа, буду благодарен.",
+            "isMine": False,
+        },
+    ]
+    runner = HHChatRunner(page=page, profile=_profile())
+
+    result = runner.run(send=False, limit=1, max_chats=10)
+
+    assert result.candidates == 1
+    assert result.replies[0]["status"] == "draft"
+    assert "Node.js" in result.replies[0]["question"]
+    assert "Напоминаю" not in result.replies[0]["question"]
+    assert "Node.js" in result.replies[0]["reply"]
+    assert "основной production-стек" in result.replies[0]["reply"]
+    assert "stack_experience" not in result.replies[0]["message"]
+
+
 def test_extracts_google_forms_and_external_targets_without_mixing_lanes():
     text = (
         "Заполните анкету https://forms.gle/abc и потом напишите в Telegram "
@@ -191,7 +274,7 @@ def test_generate_hh_chat_reply_handles_language_salary_and_sales_honestly():
     assert "english_honesty" in english.reasons
 
     salary = generate_hh_chat_reply("Какую заработную плату вы хотели бы иметь на данной должности?", _profile())
-    assert "100-200" in salary.message
+    assert "100000" in salary.message
     assert "не жесткий порог" in salary.message
     assert "salary" in salary.reasons
 
@@ -199,7 +282,7 @@ def test_generate_hh_chat_reply_handles_language_salary_and_sales_honestly():
         "Добрый день! Пожалуйста,укажите уровень дохода на который вы ориентируетесь.Спасибо!",
         _profile(),
     )
-    assert "100-200" in income.message
+    assert "100000" in income.message
     assert "не жесткий порог" in income.message
     assert income.reasons == ["salary"]
     assert "generic" not in income.reasons
@@ -235,6 +318,19 @@ def test_generate_hh_chat_reply_handles_language_salary_and_sales_honestly():
     assert "generic" not in commercial_ai.reasons
 
 
+def test_generate_hh_chat_reply_keeps_aqa_availability_ack_short():
+    draft = generate_hh_chat_reply(QA_AUTOMATION_AVAILABILITY_QUESTION, _profile())
+
+    assert draft.message == "Здравствуйте! Да, актуально, готов обсудить."
+    assert draft.reasons == ["actuality"]
+    assert "По базам" not in draft.message
+    assert "По стеку" not in draft.message
+    assert "Портфолио" not in draft.message
+    assert "databases" not in draft.reasons
+    assert "stack_experience" not in draft.reasons
+    assert "portfolio" not in draft.reasons
+
+
 def test_answer_google_form_question_uses_confirmed_contact_age_and_flexible_salary():
     profile = ApplicantProfile(
         full_name="Александр Олегович",
@@ -250,7 +346,7 @@ def test_answer_google_form_question_uses_confirmed_contact_age_and_flexible_sal
     assert answer_google_form_question("Telegram", profile) == "@ne_stoit_togo"
     salary = answer_google_form_question("Зарплатные ожидания", profile)
     assert salary is not None
-    assert "100-200" in salary
+    assert "100000" in salary
     assert "не жесткий порог" in salary
 
 
@@ -289,7 +385,7 @@ def test_generate_hh_chat_reply_handles_sap_hana_checklist_honestly():
     assert "3) ЗП" in draft.message
     assert "4) Локация - [указать город/часовой пояс]" in draft.message
     assert "5) Telegram - [указать Telegram-ник]" in draft.message
-    assert "100-200" in draft.message
+    assert "100000" in draft.message
     assert "не жесткий порог" in draft.message
     assert "Telegram-ник в профиле не указан" not in draft.message
     assert "Локация: удаленно" not in draft.message
@@ -325,6 +421,51 @@ def test_generate_hh_chat_reply_handles_engineering_discipline():
     assert "CI/CD" in draft.message
     assert "release gates" in draft.message
     assert "engineering_discipline" in draft.reasons
+
+
+def test_generate_hh_chat_reply_answers_algorithms_question_directly():
+    draft = generate_hh_chat_reply(
+        "Расскажите, пожалуйста, приведите пример, когда вы использовали алгоритмы "
+        "или структуры данных в своих проектах. Как это помогло решить задачу?",
+        _profile(),
+        context="Вакансия: Программист-разработчик Python",
+    )
+
+    assert "арбитраж" in draft.message.lower()
+    assert "30+" in draft.message
+    assert "словар" in draft.message.lower()
+    assert "очеред" in draft.message.lower()
+    assert "generic" not in draft.reasons
+    assert "готов обсудить" not in draft.message
+
+
+def test_generate_hh_chat_reply_answers_autotest_ci_metrics_question_directly():
+    draft = generate_hh_chat_reply(
+        "Опишите, как именно вы интегрировали автотесты в конвейеры сборки и развертывания. "
+        "Какие метрики качества и этапы пайплайна были наиболее значимыми в вашей практике?",
+        _profile(),
+        context="Вакансия: QA Automation Engineer",
+    )
+
+    assert "CI/CD" in draft.message
+    assert "smoke" in draft.message.lower()
+    assert "линтер" in draft.message.lower()
+    assert "pytest" in draft.message.lower()
+    assert "не pure QA" in draft.message
+    assert "generic" not in draft.reasons
+    assert "готов обсудить" not in draft.message
+
+
+def test_generate_hh_chat_reply_blocks_unknown_concrete_screening_instead_of_generic_context():
+    draft = generate_hh_chat_reply(
+        "Расскажите, пожалуйста, приведите пример нестандартной задачи в ваших проектах.",
+        _profile(),
+        context="Вакансия: Python backend, PostgreSQL, Redis",
+    )
+
+    assert "manual_required" in draft.reasons
+    assert "generic" not in draft.reasons
+    assert "готов обсудить" not in draft.message
 
 
 def test_generate_hh_chat_reply_handles_db_fintech_and_load_questions():
@@ -396,12 +537,41 @@ def test_generate_hh_chat_reply_is_honest_about_unverified_stack_and_salary():
         _profile(),
     )
 
-    assert "100-200" in draft.message
+    assert "100000" in draft.message
     assert "не жесткий порог" in draft.message
     assert "Kubernetes" in draft.message
     assert "не буду придумывать" in draft.message
     assert "—" not in draft.message
     assert "«" not in draft.message
+
+
+def test_generate_hh_chat_reply_handles_python_vue_production_experience_directly():
+    draft = generate_hh_chat_reply(
+        "Какой у вас production-опыт на Python и Vue 3?",
+        _profile(),
+        context="Работодатель: Вакансия Middle AI Engineer, нужен Fullstack на Python и Vue 3",
+    )
+
+    assert "По Python production-опыт основной" in draft.message
+    assert "FastAPI/backend" in draft.message
+    assert "PostgreSQL/Redis/Docker" in draft.message
+    assert "По Vue 3 честно" in draft.message
+    assert "React/Next.js" in draft.message
+    assert "не заявляю" in draft.message
+    assert draft.reasons == ["python_vue_screening", "python_production", "vue_honesty"]
+    assert "готов обсудить" not in draft.message
+
+
+def test_generate_hh_chat_reply_blocks_hidden_choice_prompts():
+    draft = generate_hh_chat_reply(
+        "В вакансии обещают платить от 25 до 45 $, а сколько вам предложили в разговоре? "
+        "Выберите один из предложенных вариантов.",
+        _profile(),
+    )
+
+    assert "manual_required" in draft.reasons
+    assert "choice_required" in draft.reasons
+    assert "не видно" in draft.message
 
 
 def test_generate_hh_chat_reply_is_honest_about_ansible_deployment_automation():
@@ -458,8 +628,8 @@ def test_generate_hh_chat_reply_answers_django_fastapi_screening_instead_of_poin
     assert "dependency injection" in draft.message
     assert "EXPLAIN" in draft.message
     assert "select_related/prefetch_related" in draft.message
-    assert "120 000" in draft.message
-    assert "100-200" in draft.message
+    assert "120000" in draft.message
+    assert "100000" in draft.message
     assert "не жесткий порог" in draft.message
     assert "21 пункт" not in draft.message
     assert "Go/Kafka/Elastic/Geo" not in draft.message
@@ -528,6 +698,57 @@ def test_hh_chat_external_telegram_handle_instruction_is_blocked(tmp_path):
     assert not any(call[0] == "fill" for call in page.calls)
 
 
+def test_hh_chat_runner_blocks_low_fit_qa_title_before_send(tmp_path):
+    page = FakePage()
+    page.preview_rows = [
+        {
+            "href": "https://hh.ru/chat/qa-automation",
+            "dataQa": "chatik-open-chat-qa-automation",
+            "text": f"QA Automation Engineer\n{QA_AUTOMATION_AVAILABILITY_QUESTION}",
+        }
+    ]
+    page.chat_body = f"Работодатель\n{QA_AUTOMATION_AVAILABILITY_QUESTION}"
+    page.chat_messages = [{"text": QA_AUTOMATION_AVAILABILITY_QUESTION, "isMine": False}]
+    state = HHChatReplyState(tmp_path / "state.json")
+    notifier = FakeNotifier()
+    runner = HHChatRunner(page=page, profile=_profile(), state=state, alert_notifier=notifier)
+
+    result = runner.run(send=True, limit=1)
+
+    assert result.blocked == 1
+    assert result.sent == 0
+    assert result.drafted == 0
+    assert result.statuses == ["blocked_low_fit_title"]
+    assert result.replies[0]["title"] == "QA Automation Engineer"
+    assert "Low-fit chat title blocked (QA/AQA)" in result.replies[0]["message"]
+    assert result.replies[0]["reply"] == ""
+    assert notifier.alerts == []
+    assert not any(call[0] == "fill" for call in page.calls)
+
+
+def test_hh_chat_runner_answers_low_fit_title_when_owner_approved(monkeypatch, tmp_path):
+    monkeypatch.setenv("HH_CHAT_REPLY_ANSWER_LOW_FIT", "1")
+    page = FakePage()
+    page.preview_rows = [
+        {
+            "href": "https://hh.ru/chat/abc",
+            "dataQa": "chatik-open-chat-abc",
+            "text": f"QA Automation Engineer\n{QA_AUTOMATION_AVAILABILITY_QUESTION}",
+        }
+    ]
+    page.chat_body = f"Работодатель\n{QA_AUTOMATION_AVAILABILITY_QUESTION}"
+    page.chat_messages = [{"text": QA_AUTOMATION_AVAILABILITY_QUESTION, "isMine": False}]
+    state = HHChatReplyState(tmp_path / "state.json")
+    runner = HHChatRunner(page=page, profile=_profile(), state=state)
+
+    result = runner.run(send=True, limit=1)
+
+    assert result.sent == 1
+    assert result.statuses == ["sent"]
+    assert result.replies[0]["title"] == "QA Automation Engineer"
+    assert page.sent_messages
+
+
 def test_hh_chat_runner_blocks_manual_required_draft_even_when_send_enabled(tmp_path):
     page = FakePage()
     checklist = (
@@ -570,6 +791,34 @@ def test_hh_chat_runner_drafts_without_sending(tmp_path):
     assert result.sent == 0
     assert not any(call[0] == "fill" for call in page.calls)
     assert result.replies[0]["reply"].startswith("Здравствуйте!")
+
+
+def test_hh_chat_runner_uses_whole_chat_context_for_generic_followup(tmp_path):
+    page = FakePage()
+    page.preview_rows = [
+        {
+            "href": "https://hh.ru/chat/contextual",
+            "dataQa": "chatik-open-chat-contextual",
+            "text": "AI Agent Engineer\nАктуально ли обсудить вакансию?",
+        }
+    ]
+    page.chat_body = (
+        "Работодатель\nВ роли важны AI-агенты, LLM/RAG и Python/FastAPI интеграции\n"
+        "Работодатель\nАктуально ли обсудить вакансию?"
+    )
+    page.chat_messages = [
+        {"text": "В роли важны AI-агенты, LLM/RAG и Python/FastAPI интеграции", "isMine": False},
+        {"text": "Актуально ли обсудить вакансию?", "isMine": False},
+    ]
+    state = HHChatReplyState(tmp_path / "state.json")
+    runner = HHChatRunner(page=page, profile=_profile(), state=state)
+
+    result = runner.run(send=False, limit=1)
+
+    assert result.drafted == 1
+    assert result.replies[0]["question"] == "Актуально ли обсудить вакансию?"
+    assert "AI-агентах" in result.replies[0]["reply"]
+    assert "context_focus" in result.replies[0]["message"]
 
 
 def test_hh_chat_runner_deep_scans_interview_preview_and_uses_inside_question(tmp_path):
@@ -655,6 +904,65 @@ def test_hh_chat_external_alert_is_sent_with_notifier_and_deduplicated(tmp_path)
     assert duplicate.statuses == ["skipped_external_alert_duplicate"]
     assert duplicate.skipped == 1
     assert len(notifier.alerts) == 1
+
+
+def test_hh_chat_external_handoff_does_not_send_hh_ack_by_default(monkeypatch, tmp_path):
+    monkeypatch.setenv("HH_PROFILE_TELEGRAM", "@ne_stoit_togo")
+    handoff = "Отправь пожалуйста мне в телеграм @mariahuntcode небольшую анкету для интервью"
+    page = FakePage()
+    page.preview_rows = [
+        {
+            "href": "https://hh.ru/chat/telegram-handoff",
+            "dataQa": "chatik-open-chat-telegram-handoff",
+            "text": f"Recruiter\n{handoff}",
+        }
+    ]
+    page.chat_body = f"Работодатель\n{handoff}"
+    page.chat_messages = [{"text": handoff, "isMine": False}]
+    state = HHChatReplyState(tmp_path / "state.json")
+    notifier = FakeNotifier()
+    runner = HHChatRunner(page=page, profile=_profile(), state=state, alert_notifier=notifier)
+
+    result = runner.run(send=True, limit=1)
+
+    assert result.sent == 0
+    assert result.statuses == ["external_alert_sent"]
+    assert len(notifier.alerts) == 1
+    assert page.sent_messages == []
+    assert "hh_ack_status" not in result.replies[0]["external_result"]
+
+
+def test_hh_chat_existing_external_alert_does_not_send_hh_ack(tmp_path):
+    handoff = "Отправь пожалуйста мне в телеграм @mariahuntcode небольшую анкету для интервью"
+    page = FakePage()
+    page.preview_rows = [
+        {
+            "href": "https://hh.ru/chat/telegram-handoff",
+            "dataQa": "chatik-open-chat-telegram-handoff",
+            "text": f"Recruiter\n{handoff}",
+        }
+    ]
+    page.chat_body = f"Работодатель\n{handoff}"
+    page.chat_messages = [{"text": handoff, "isMine": False}]
+    state = HHChatReplyState(tmp_path / "state.json")
+    state.mark_external_handled(
+        chat_id="telegram-handoff",
+        question=handoff,
+        target="@mariahuntcode",
+        action="alert",
+        status="external_alert_sent",
+        message="already alerted",
+    )
+    notifier = FakeNotifier()
+    runner = HHChatRunner(page=page, profile=_profile(), state=state, alert_notifier=notifier)
+
+    result = runner.run(send=True, limit=1)
+
+    assert result.sent == 0
+    assert result.statuses == ["skipped_external_alert_duplicate"]
+    assert notifier.alerts == []
+    assert page.sent_messages == []
+
 
 
 def test_hh_chat_external_alert_missing_notifier_does_not_crash(tmp_path):

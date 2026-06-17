@@ -8,7 +8,9 @@ source "$SCRIPT_DIR/hh_telegram_env.sh"
 export HH_CRM_DB_PATH="${HH_CRM_DB_PATH:-./data/hh_crm.sqlite3}"
 
 if [[ -z "${HH_CHAT_REPLY_PYTHON:-}" ]]; then
-  if [[ -n "${HH_TELEGRAM_PYTHON:-}" ]]; then
+  if [[ -x ./.venv/bin/python3 ]]; then
+    HH_CHAT_REPLY_PYTHON=./.venv/bin/python3
+  elif [[ -n "${HH_TELEGRAM_PYTHON:-}" ]]; then
     HH_CHAT_REPLY_PYTHON="$HH_TELEGRAM_PYTHON"
   elif [[ -x /usr/local/lib/hermes-agent/venv/bin/python3 ]]; then
     HH_CHAT_REPLY_PYTHON=/usr/local/lib/hermes-agent/venv/bin/python3

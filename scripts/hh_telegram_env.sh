@@ -4,6 +4,9 @@ set -euo pipefail
 HH_TELEGRAM_PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$HH_TELEGRAM_PROJECT_ROOT"
 
+# shellcheck source=load_project_env.sh
+source "$HH_TELEGRAM_PROJECT_ROOT/scripts/load_project_env.sh"
+
 # Preserve explicit caller overrides when sourcing the local secrets file. This lets
 # watchdog/cron force safe runtime flags such as HH_TELEGRAM_SEND_ON_START=0 even
 # if the secrets file contains a different default.

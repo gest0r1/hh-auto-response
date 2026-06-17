@@ -37,6 +37,36 @@ TELEGRAM_COMMAND_MENU: tuple[tuple[str, str], ...] = (
     ("edit", "Заменить черновик: /edit ID текст"),
     ("help", "Список команд и безопасный режим"),
 )
+TELEGRAM_CHAT_ID_PLACEHOLDERS = {
+    "0",
+    "0000",
+    "12345",
+    "123456",
+    "chatid",
+    "demo",
+    "demochatid",
+    "example",
+    "examplechatid",
+    "hhtelegramchatid",
+    "placeholder",
+    "placeholderchatid",
+    "telegramchatid",
+    "yourchatid",
+    "yourhhtelegramchatid",
+    "yourtelegramchatid",
+}
+
+
+def is_configured_telegram_chat_id(value: str | int | None) -> bool:
+    if value is None:
+        return False
+    stripped = str(value).strip().strip("\"'")
+    if not stripped:
+        return False
+    if stripped.lstrip("-").isdigit():
+        return int(stripped) not in {0, 12345, 123456}
+    normalized = "".join(char for char in stripped.strip("<>{}[]()").lower() if char.isalnum())
+    return normalized not in TELEGRAM_CHAT_ID_PLACEHOLDERS
 
 
 class TelegramAPIError(RuntimeError):
@@ -443,7 +473,7 @@ class HHTelegramReviewAgent:
         if not path.exists():
             return None
         value = path.read_text(encoding="utf-8").strip()
-        if not value:
+        if not is_configured_telegram_chat_id(value):
             return None
         return int(value) if value.lstrip("-").isdigit() else value
 

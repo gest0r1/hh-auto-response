@@ -11,8 +11,11 @@ def test_profile_loader_uses_json_profile(monkeypatch, tmp_path):
                 "full_name": "Александр Олегович",
                 "headline": "Platform Architect",
                 "portfolio_url": "https://portfolio.viably.dev",
+                "github_url": "https://github.com/Glour/dashboard-ai-office",
+                "proof_pack_url": "https://disk.yandex.ru/d/TZHMyvaIDRYoeg",
                 "location": "Обнинск",
                 "telegram": "@ne_stoit_togo",
+                "telegram_channel": None,
                 "age": 25,
                 "phone": "+79106053173",
                 "skills": ["FastAPI", "React", "Telegram"],
@@ -42,8 +45,11 @@ def test_profile_loader_uses_json_profile(monkeypatch, tmp_path):
     assert candidate.target_roles == ["Backend Engineer"]
     assert candidate.min_monthly_salary == 250000
     assert applicant.portfolio_url == "https://portfolio.viably.dev"
+    assert applicant.github_url == "https://github.com/Glour/dashboard-ai-office"
+    assert applicant.proof_pack_url == "https://disk.yandex.ru/d/TZHMyvaIDRYoeg"
     assert applicant.location == "Обнинск"
     assert applicant.telegram == "@ne_stoit_togo"
+    assert applicant.telegram_channel is None
     assert applicant.age == 25
     assert applicant.phone == "+79106053173"
     assert applicant.cases[0].title == "Viably"

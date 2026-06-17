@@ -6,8 +6,8 @@ from typing import Any, Protocol
 from app.agent import JobSearchAgent, SearchClient
 from app.hh_browser import BrowserApplyResult, row_to_apply_draft
 from app.repository import CRMRepository
-from app.responses import ApplicantProfile
-from app.scoring import CandidateProfile
+from app.responses import ApplicantProfile, ResponseContext, check_cover_letter_quality
+from app.scoring import CandidateProfile, Vacancy
 
 
 class ApplyRunner(Protocol):
@@ -24,6 +24,7 @@ class AutoApplySettings:
     daily_limit: int | None = 5
     send: bool = False
     include_demo: bool = False
+    company_guard: str = "strict"
 
 
 def _send_capacity(repo: CRMRepository, settings: AutoApplySettings) -> tuple[int, int | None, bool]:
@@ -35,6 +36,88 @@ def _send_capacity(repo: CRMRepository, settings: AutoApplySettings) -> tuple[in
     sent_today = repo.count_sent_today()
     remaining = max(0, daily_limit - sent_today)
     return min(limit, remaining), remaining, remaining <= 0
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _review_row_score(row: dict[str, Any]) -> int:
+    return _optional_int(row.get("score_at_apply")) or _optional_int(row.get("score")) or 0
+
+
+def _vacancy_from_review_row(row: dict[str, Any]) -> Vacancy:
+    raw = row.get("raw")
+    skills = row.get("skills")
+    return Vacancy(
+        external_id=str(row.get("external_id") or ""),
+        title=str(row.get("title") or ""),
+        company=str(row.get("company") or ""),
+        description=str(row.get("description") or ""),
+        url=str(row.get("url") or ""),
+        salary_from=_optional_int(row.get("salary_from")),
+        salary_to=_optional_int(row.get("salary_to")),
+        currency=str(row["currency"]) if row.get("currency") is not None else None,
+        schedule=str(row["schedule"]) if row.get("schedule") is not None else None,
+        employment=str(row["employment"]) if row.get("employment") is not None else None,
+        skills=[str(skill) for skill in skills] if isinstance(skills, list) else [],
+        raw=raw if isinstance(raw, dict) else {},
+    )
+
+
+def _archive_quality_failed_draft(
+    repo: CRMRepository,
+    *,
+    row: dict[str, Any],
+    issues: list[str],
+) -> None:
+    vacancy_id = _optional_int(row.get("id"))
+    application_id = _optional_int(row.get("application_id"))
+    notes = "HH browser auto-apply quality gate archived stale draft: " + ", ".join(issues)
+    if application_id is not None:
+        repo.record_feedback(
+            vacancy_id=vacancy_id,
+            application_id=application_id,
+            event_type="archived",
+            notes=notes,
+        )
+    elif vacancy_id is not None:
+        repo.archive_draft_application(vacancy_id)
+
+
+def _quality_checked_drafts(
+    *,
+    repo: CRMRepository,
+    rows: list[dict[str, Any]],
+    applicant_profile: ApplicantProfile,
+) -> tuple[list[Any], list[dict[str, Any]]]:
+    drafts: list[Any] = []
+    quality_issues: list[dict[str, Any]] = []
+    for row in rows:
+        vacancy = _vacancy_from_review_row(row)
+        quality = check_cover_letter_quality(
+            str(row.get("cover_letter") or ""),
+            ResponseContext(profile=applicant_profile, vacancy=vacancy, score=_review_row_score(row)),
+        )
+        if not quality.passed:
+            issues = list(quality.issues)
+            _archive_quality_failed_draft(repo, row=row, issues=issues)
+            quality_issues.append(
+                {
+                    "external_id": vacancy.external_id,
+                    "application_id": _optional_int(row.get("application_id")),
+                    "vacancy_id": _optional_int(row.get("id")),
+                    "issues": issues,
+                }
+            )
+            continue
+        drafts.append(row_to_apply_draft(row))
+    return drafts, quality_issues
 
 
 def run_auto_apply_once(
@@ -57,6 +140,7 @@ def run_auto_apply_once(
         hh_client=search_client,
         candidate_profile=candidate_profile,
         applicant_profile=applicant_profile,
+        company_guard=settings.company_guard,
     )
     search_stats = agent.run_once(
         queries=settings.queries,
@@ -69,9 +153,12 @@ def run_auto_apply_once(
         result: dict[str, Any] = {
             "search": search_stats,
             "queued": 0,
+            "queue_candidates": 0,
             "prepared": 0,
             "sent": 0,
             "blocked": 0,
+            "quality_skipped": 0,
+            "quality_issues": [],
             "send_enabled": settings.send,
             "daily_limit": settings.daily_limit,
             "daily_remaining": daily_remaining,
@@ -81,8 +168,17 @@ def run_auto_apply_once(
         repo.record_run_log(agent_name="hh-auto-apply", status="skipped", details=result)
         return result
 
-    rows = repo.review_queue(min_score=settings.min_score, limit=capacity, include_demo=settings.include_demo)
-    drafts = [row_to_apply_draft(row) for row in rows]
+    rows = repo.review_queue(
+        min_score=settings.min_score,
+        limit=capacity,
+        include_demo=settings.include_demo,
+        company_guard=settings.company_guard,
+    )
+    drafts, quality_issues = _quality_checked_drafts(
+        repo=repo,
+        rows=rows,
+        applicant_profile=applicant_profile,
+    )
     results = apply_runner.run(drafts, send=settings.send) if drafts else []
 
     sent = 0
@@ -117,9 +213,12 @@ def run_auto_apply_once(
     result = {
         "search": search_stats,
         "queued": len(drafts),
+        "queue_candidates": len(rows),
         "prepared": prepared,
         "sent": sent,
         "blocked": blocked,
+        "quality_skipped": len(quality_issues),
+        "quality_issues": quality_issues,
         "send_enabled": settings.send,
         "daily_limit": settings.daily_limit,
         "daily_remaining": daily_remaining,

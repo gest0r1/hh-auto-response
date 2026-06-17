@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=load_project_env.sh
+source ./scripts/load_project_env.sh
 
-export PYTHONPATH=backend
+export PYTHONPATH="${PYTHONPATH:-backend}"
 export HH_CRM_DB_PATH="${HH_CRM_DB_PATH:-./data/hh_crm.sqlite3}"
 
 if [[ -z "${HH_AUTO_APPLY_PYTHON:-}" ]]; then
-  if [[ -x /usr/local/lib/hermes-agent/venv/bin/python3 ]]; then
+  if [[ -x ./.venv/bin/python3 ]]; then
+    HH_AUTO_APPLY_PYTHON=./.venv/bin/python3
+  elif [[ -x /usr/local/lib/hermes-agent/venv/bin/python3 ]]; then
     HH_AUTO_APPLY_PYTHON=/usr/local/lib/hermes-agent/venv/bin/python3
   elif command -v python3 >/dev/null 2>&1; then
     HH_AUTO_APPLY_PYTHON="$(command -v python3)"
@@ -52,6 +56,7 @@ cmd=(
   --min-score "${HH_AUTO_APPLY_MIN_SCORE:-80}"
   --limit "${HH_AUTO_APPLY_LIMIT:-5}"
   --daily-limit "${HH_AUTO_APPLY_DAILY_LIMIT:-5}"
+  --company-guard "${HH_AUTO_APPLY_COMPANY_GUARD:-strict}"
 )
 
 if [[ "${HH_AUTO_APPLY_HEADLESS:-0}" == "1" ]]; then

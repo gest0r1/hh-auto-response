@@ -6,7 +6,7 @@ import os
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, Sequence
 from urllib.parse import urljoin, urlparse
 
 from app.responses import ApplicantProfile
@@ -173,6 +173,9 @@ DEEP_SCAN_PREVIEW_MARKERS = [
     "чек-лист",
     "чек лист",
     "чеклист",
+    "напоминаю про мой вопрос",
+    "напоминаю про вопрос",
+    "напоминаю",
 ]
 QUESTIONNAIRE_MARKERS = [
     "анкета",
@@ -285,10 +288,23 @@ HONESTY_TERM_PATTERNS = [
     (re.compile(r"\b1[сc]\b", re.I), "1C"),
     (re.compile(r"\bflutter\b", re.I), "Flutter"),
     (re.compile(r"\bswift\b", re.I), "Swift"),
+    (re.compile(r"\bvue(?:\.js)?\b|vue\s*3", re.I), "Vue 3"),
     (re.compile(r"\bandroid\b", re.I), "Android"),
     (re.compile(r"\bios\b", re.I), "iOS"),
     (re.compile(r"\bpytorch\b", re.I), "PyTorch"),
     (re.compile(r"\bhadoop\b", re.I), "Hadoop"),
+]
+LOW_FIT_CHAT_TITLE_PATTERNS = [
+    (re.compile(r"(?<![a-z0-9])a?qa(?![a-z0-9])", re.I), "QA/AQA"),
+    (
+        re.compile(
+            r"(?<![a-z0-9])tester(?![a-z0-9])|тестировщик|тестировани[ея]|автотест",
+            re.I,
+        ),
+        "tester/testing",
+    ),
+    (re.compile(r"(?<![a-z0-9])mlops(?![a-z0-9])", re.I), "MLOps"),
+    (re.compile(r"(?<![a-z0-9])devops(?![a-z0-9])|dev\s*ops", re.I), "DevOps"),
 ]
 
 
@@ -767,9 +783,259 @@ def extract_latest_question(conversation_text: str, fallback_preview: str) -> st
     return normalize_text(fallback_preview)
 
 
+def format_chat_context(
+    messages: Sequence[dict[str, Any] | HHChatMessage],
+    *,
+    max_messages: int = 24,
+) -> str:
+    parsed = [message for raw in messages if (message := chat_message_from_raw(raw))]
+    lines: list[str] = []
+    for message in parsed[-max(max_messages, 1) :]:
+        speaker = "Я" if message.is_mine else "Работодатель"
+        text = normalize_text(message.text)
+        if text:
+            lines.append(f"{speaker}: {text}")
+    return "\n".join(lines)
+
+
 def _contains_any(text: str, markers: list[str]) -> bool:
     lowered = _lower(text)
     return any(marker in lowered for marker in markers)
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def low_fit_chat_title_guard_enabled() -> bool:
+    return not (
+        _env_flag("HH_CHAT_REPLY_ANSWER_LOW_FIT")
+        or _env_flag("HH_CHAT_REPLY_ALL_TITLES")
+    )
+
+
+def external_handoff_ack_enabled() -> bool:
+    return _env_flag("HH_CHAT_REPLY_ACK_EXTERNAL_HANDOFF")
+
+
+def external_handoff_ack_message(question: str, profile: ApplicantProfile) -> str:
+    telegram = _telegram_nick(profile)
+    if is_google_form_url(question) or "forms.gle" in _lower(question) or "docs.google.com/forms" in _lower(question):
+        base = "Здравствуйте! Ссылку получил, спасибо."
+    else:
+        base = "Здравствуйте! Ссылку получил, спасибо."
+    if telegram:
+        return f"{base} Telegram: {telegram}"
+    return base
+
+
+def low_fit_chat_title_reason(title: str) -> str | None:
+    normalized = normalize_text(title)
+    if not normalized:
+        return None
+    for pattern, label in LOW_FIT_CHAT_TITLE_PATTERNS:
+        if pattern.search(normalized):
+            return label
+    return None
+
+
+def is_database_experience_question(text: str) -> bool:
+    lowered = _lower(text)
+    has_database_term = _contains_any(
+        lowered,
+        [
+            "sql",
+            "nosql",
+            "вектор",
+            "vector",
+            "postgres",
+            "redis",
+            "elastic",
+            "elasticsearch",
+            "database",
+            "субд",
+            "база данных",
+            "базы данных",
+            "баз данных",
+            "базами",
+            "базах",
+        ],
+    )
+    if not has_database_term:
+        return False
+    return is_concrete_experience_question(lowered) or _contains_any(
+        lowered,
+        [
+            "какие базы",
+            "какими базами",
+            "с какими баз",
+            "базы данных вы",
+            "базами данных вы",
+        ],
+    )
+
+
+def is_concrete_experience_question(text: str) -> bool:
+    lowered = _lower(text)
+    return _contains_any(
+        lowered,
+        [
+            "какой опыт",
+            "какой у вас опыт",
+            "какой у вас production-опыт",
+            "production-опыт",
+            "продакшн-опыт",
+            "каким опытом",
+            "есть ли опыт",
+            "есть ли у вас опыт",
+            "был ли опыт",
+            "был ли у вас опыт",
+            "опыт с",
+            "работали с",
+            "работал с",
+            "использовали",
+            "использовал",
+            "применяли",
+            "приходилось",
+            "расскажите",
+            "опишите",
+            "перечислите",
+            "с какими",
+            "что вы",
+            "как вы",
+            "сколько лет",
+        ],
+    )
+
+
+def is_stack_experience_question(text: str) -> bool:
+    lowered = _lower(text)
+    has_stack_term = _contains_any(
+        lowered,
+        [
+            "стек",
+            "python",
+            "fastapi",
+            "react",
+            "next",
+            "node",
+            "node.js",
+            "typescript",
+            "vue",
+            "llm",
+            "rag",
+            "telegram",
+            "docker",
+            "backend",
+            "frontend",
+        ],
+    )
+    has_stack_question = _contains_any(
+        lowered,
+        ["какой стек", "стек технологий", "технологический стек"],
+    )
+    return has_stack_term and (has_stack_question or is_concrete_experience_question(lowered))
+
+
+def is_python_vue_experience_question(text: str) -> bool:
+    lowered = _lower(text)
+    if not lowered:
+        return False
+    return (
+        "python" in lowered
+        and "vue" in lowered
+        and _contains_any(lowered, ["production-опыт", "продакшн-опыт", "какой у вас", "опыт"])
+    )
+
+
+def is_algorithms_data_structures_question(text: str) -> bool:
+    lowered = _lower(text)
+    if not lowered:
+        return False
+    return _contains_any(lowered, ["алгоритм", "структур"]) and _contains_any(
+        lowered,
+        ["пример", "использовали", "использовал", "применяли", "решить задачу", "помогло"],
+    )
+
+
+def is_autotest_ci_metrics_question(text: str) -> bool:
+    lowered = _lower(text)
+    if not lowered:
+        return False
+    asks_for_detail = _contains_any(
+        lowered,
+        ["опишите", "как именно", "какие метрики", "метрики качества", "этапы пайплайна"],
+    )
+    if not asks_for_detail:
+        return False
+    has_autotest = _contains_any(lowered, ["автотест", "auto test", "autotest", "pytest", "playwright"])
+    has_pipeline = _contains_any(
+        lowered,
+        ["конвейер", "pipeline", "ci/cd", "сборк", "разверт", "развёрт", "деплой", "deploy"],
+    )
+    has_metrics = _contains_any(lowered, ["метрик", "качества", "этапы пайплайна"])
+    return has_autotest and (has_pipeline or has_metrics)
+
+
+def is_availability_only_prompt(text: str) -> bool:
+    lowered = _lower(text)
+    if not lowered:
+        return False
+    has_availability = _contains_any(
+        lowered,
+        [
+            "актуально ли",
+            "актуальна ли",
+            "актуален ли",
+            "готовы ли рассмотреть",
+            "готовы рассмотреть",
+            "готовы ли обсудить",
+            "готовы обсудить",
+            "готов ли обсудить",
+            "интересно ли",
+            "интересна ли",
+            "рассматриваете ли",
+            "рассматриваете вакансию",
+            "рассмотреть эту вакансию",
+            "рассмотреть вакансию",
+        ],
+    )
+    if not has_availability:
+        return False
+    if is_database_experience_question(lowered) or is_stack_experience_question(lowered):
+        return False
+    return not _contains_any(
+        lowered,
+        [
+            "есть ли",
+            "был ли",
+            "приходилось",
+            "расскажите",
+            "опишите",
+            "перечислите",
+            "сколько",
+            "какой у вас",
+            "какую заработ",
+            "зарплат",
+            "доход",
+            "ожидания",
+            "график",
+            "формат",
+            "уровень англ",
+            "где вы",
+            "локац",
+            "когда удобно",
+            "с какими",
+            "что вы",
+            "как вы",
+            "тестовое",
+            "тз",
+            "задание",
+        ],
+    )
 
 
 def is_vacancy_point_fit_prompt(text: str) -> bool:
@@ -835,6 +1101,22 @@ def is_contract_logistics_prompt(text: str) -> bool:
     return has_location or has_b2b_contract or has_legal_contract
 
 
+def is_choice_required_prompt(text: str) -> bool:
+    lowered = _lower(text)
+    if not lowered:
+        return False
+    return _contains_any(
+        lowered,
+        [
+            "выберите один из предложенных вариантов",
+            "выберите один вариант",
+            "выберите вариант",
+            "один из предложенных вариантов",
+            "предложенных вариантов",
+        ],
+    )
+
+
 def _profile_location_sentence(profile: ApplicantProfile) -> str:
     location = _profile_location(profile) or "[указать город/часовой пояс]"
     return f"Проживаю: {location}."
@@ -873,6 +1155,19 @@ def _profile_location(profile: ApplicantProfile) -> str | None:
     return value or None
 
 
+def _context_focus_sentence(context: str) -> str | None:
+    lowered = _lower(context)
+    if not lowered:
+        return None
+    if _contains_any(lowered, ["llm", "rag", "ai", "искусственн", "агент", "agent", "нейросет"]):
+        return "По контексту ближе всего мой опыт в AI-агентах, LLM/RAG, Python/FastAPI и интеграциях."
+    if _contains_any(lowered, ["python", "fastapi", "django", "backend", "api", "postgres", "redis"]):
+        return "По контексту ближе всего мой опыт в Python/backend, FastAPI/Django, API, PostgreSQL/Redis и интеграциях."
+    if _contains_any(lowered, ["react", "next.js", "nextjs", "frontend", "fullstack", "full-stack"]):
+        return "По контексту ближе всего мой опыт в full-stack: React/Next.js, backend/API и интеграции."
+    return None
+
+
 def humanize_hh_chat_reply(text: str) -> str:
     text = text.replace("—", "-").replace("–", "-").replace("«", "").replace("»", "")
     text = re.sub(r"\s+", " ", text).strip()
@@ -885,8 +1180,9 @@ def _humanize_multiline(text: str) -> str:
     return "\n".join(line for line in lines if line)
 
 
-def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatReplyDraft:
+def generate_hh_chat_reply(question: str, profile: ApplicantProfile, *, context: str = "") -> HHChatReplyDraft:
     lowered = _lower(question)
+    context_focus = _context_focus_sentence(context)
     skills = list(getattr(profile, "skills", []) or [])
     # ApplicantProfile in responses.py does not expose skills directly, so derive a compact known set
     # from headline, strengths and case stacks when available.
@@ -945,6 +1241,50 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatRe
             reasons=["ansible_honesty"],
         )
 
+    if _contains_any(lowered, ["node.js", "node js", "node"]) and is_concrete_experience_question(lowered):
+        return HHChatReplyDraft(
+            message=humanize_hh_chat_reply(
+                "Здравствуйте! Да, опыт с Node.js есть в реальных проектах на стыке backend/full-stack: "
+                "API, интеграции и связка с React/Next.js. При этом основной production-стек у меня Python/FastAPI/Django, "
+                "поэтому Node.js не называю главным стеком, но работать с ним в продуктовых задачах могу."
+            ),
+            reasons=["nodejs_experience", "python_primary_stack"],
+        )
+
+    if is_python_vue_experience_question(lowered):
+        return HHChatReplyDraft(
+            message=humanize_hh_chat_reply(
+                "Здравствуйте! По Python production-опыт основной: примерно с 2025 года. "
+                "Делал FastAPI/backend, API, LLM/RAG и агентные сервисы, интеграции, PostgreSQL/Redis/Docker, деплой и поддержку. "
+                "По Vue 3 честно: глубокий production-опыт не заявляю. На frontend ближе React/Next.js, "
+                "но с Vue 3 смогу быстро встроиться, потому что fullstack-логика, API, компоненты и состояние мне понятны."
+            ),
+            reasons=["python_vue_screening", "python_production", "vue_honesty"],
+        )
+
+    if is_algorithms_data_structures_question(lowered):
+        return HHChatReplyDraft(
+            message=humanize_hh_chat_reply(
+                "Здравствуйте! Пример ближе всего из проекта по поиску арбитражных связок на 30+ криптобиржах. "
+                "Использовал словари для быстрого доступа к котировкам по бирже и торговой паре, "
+                "очереди задач для обновления данных, сортировку и фильтры по спреду, комиссиям и ликвидности. "
+                "Это помогло быстро отсекать слабые варианты и показывать только связки, которые имело смысл проверять дальше."
+            ),
+            reasons=["algorithms_data_structures"],
+        )
+
+    if is_autotest_ci_metrics_question(lowered):
+        return HHChatReplyDraft(
+            message=humanize_hh_chat_reply(
+                "Здравствуйте! В чистой роли не pure QA я не работал, но автотесты и проверки в CI/CD интегрировал "
+                "на backend/automation проектах. Обычно это были pytest/unit/integration, smoke-проверки после сборки "
+                "или деплоя, линтеры, проверки API и health-checks. В пайплайне важнее всего были этапы: install/build, "
+                "lint/test, подготовка окружения, deploy, smoke/health-check. По метрикам смотрел прохождение тестов, "
+                "падения сборки, время пайплайна, стабильность деплоя и ошибки после релиза."
+            ),
+            reasons=["autotest_ci_metrics", "qa_honesty"],
+        )
+
     if is_django_fastapi_screening_prompt(lowered):
         return HHChatReplyDraft(
             message=_humanize_multiline(
@@ -957,11 +1297,20 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatRe
                 "Медленный запрос в Django/ORM обычно разбираю от факта: смотрю SQL/EXPLAIN, N+1, индексы, "
                 "select_related/prefetch_related, форму запроса и только потом кеширование.\n\n"
                 "График МСК+2 с 09:00 до 18:00 в целом комфортен. По вилке: "
-                "120 000 ₽ для удаленного формата могу обсудить, особенно если есть быстрый старт, "
-                "стабильность или понятный рост. В целом сейчас рассматриваю удаленные варианты от 100-200 тыс. ₽. "
-                "300 тыс. ₽+ - комфортный ориентир, не жесткий порог."
+                "120000 для удаленного формата могу обсудить, особенно если есть быстрый старт, "
+                "стабильность или понятный рост. В целом сейчас рассматриваю удаленные варианты от 100000 до 200000. "
+                "300000+ - комфортный ориентир, не жесткий порог."
             ),
             reasons=["django_fastapi_screening", "salary", "format"],
+        )
+
+    if is_choice_required_prompt(lowered):
+        return HHChatReplyDraft(
+            message=humanize_hh_chat_reply(
+                "Здравствуйте! Тут нужно выбрать один из вариантов в интерфейсе, а вариантов в тексте чата не видно. "
+                "Оставлю на ручную проверку, чтобы не выбрать не то."
+            ),
+            reasons=["choice_required", "manual_required"],
         )
 
     if is_contract_logistics_prompt(lowered):
@@ -1004,6 +1353,17 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatRe
                 reasons=["commercial_ai_years_honesty"],
             )
 
+    if is_availability_only_prompt(lowered):
+        message = "Здравствуйте! Да, актуально, готов обсудить."
+        reasons = ["actuality"]
+        if context_focus:
+            message = f"{message} {context_focus}"
+            reasons.append("context_focus")
+        return HHChatReplyDraft(
+            message=humanize_hh_chat_reply(message),
+            reasons=reasons,
+        )
+
     if _contains_any(lowered, ["актуаль", "интерес", "рассматриваете", "готовы", "готов ли"]):
         sentences.append("Да, актуально, готов обсудить.")
         reasons.append("actuality")
@@ -1045,7 +1405,7 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatRe
         )
         reasons.append("postgres_optimization_honesty")
 
-    if _contains_any(lowered, ["sql", "nosql", "вектор", "vector", "баз", "postgres", "redis", "elastic"]) and "postgres_optimization_honesty" not in reasons:
+    if is_database_experience_question(lowered) and "postgres_optimization_honesty" not in reasons:
         sentences.append(
             "По базам: в production работал с PostgreSQL и SQLite как SQL-слоем, Redis как cache/queue/state, "
             "Elasticsearch и vector search для поиска/RAG. Встраивал это в backend, CRM/админки, LLM/RAG и агентные контуры."
@@ -1105,7 +1465,7 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatRe
         )
         reasons.append("honesty_unknown_stack")
 
-    if _contains_any(lowered, ["стек", "python", "fastapi", "react", "next", "llm", "rag", "telegram", "docker", "backend", "frontend"]) and not _contains_any(
+    if is_stack_experience_question(lowered) and not _contains_any(
         lowered,
         ["llm council", "council", "маршрутиз", "router", "routing"],
     ):
@@ -1156,16 +1516,39 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile) -> HHChatRe
         )
         reasons.append("test_task")
 
-    if len(sentences) == 1:
-        proof = (
-            strengths[0]
-            if strengths
-            else "строю AI-агентные и full-stack/backend контуры: Telegram/Web, CRM, LLM/RAG, деплой и мониторинг"
+    if len(sentences) == 1 and is_concrete_experience_question(lowered):
+        return HHChatReplyDraft(
+            message=humanize_hh_chat_reply(
+                "Здравствуйте! Вопрос требует точного ответа по конкретному опыту. "
+                "Не буду отправлять общий шаблон вместо ответа, лучше проверю вручную."
+            ),
+            reasons=["manual_required", "unmatched_concrete_screening"],
         )
-        sentences.append(f"Да, готов обсудить. По профилю я ближе всего к AI Agent Systems / AgentOps и backend/full-stack: {proof}.")
-        reasons.append("generic")
 
-    if portfolio and _contains_any(lowered, ["портфолио", "пример", "кейсы", "ссылка", "резюме", "опыт", "расскажите"]) and portfolio not in " ".join(sentences):
+    if len(sentences) == 1:
+        if context_focus:
+            sentences.append(f"Да, готов обсудить. {context_focus}")
+            reasons.extend(["generic", "context_focus"])
+        else:
+            proof = (
+                strengths[0]
+                if strengths
+                else "строю AI-агентные и full-stack/backend контуры: Telegram/Web, CRM, LLM/RAG, деплой и мониторинг"
+            )
+            sentences.append(f"Да, готов обсудить. По профилю я ближе всего к AI Agent Systems / AgentOps и backend/full-stack: {proof}.")
+            reasons.append("generic")
+
+    portfolio_requested = _contains_any(lowered, ["портфолио", "пример", "кейсы", "ссылка", "резюме"])
+    if (
+        portfolio
+        and (
+            portfolio_requested
+            or is_concrete_experience_question(lowered)
+            or is_database_experience_question(lowered)
+            or is_stack_experience_question(lowered)
+        )
+        and portfolio not in " ".join(sentences)
+    ):
         sentences.append(f"Портфолио: {portfolio}")
         reasons.append("portfolio")
 
@@ -1179,9 +1562,9 @@ def _strip_greeting(text: str) -> str:
 def _salary_positioning_text() -> str:
     return (
         "Сейчас приоритет - удаленная работа и быстрый старт. "
-        "Готов рассматривать варианты от 100-200 тыс. ₽, если задачи нормальные, "
+        "Готов рассматривать варианты от 100000 до 200000, если задачи нормальные, "
         "есть стабильность или понятный потенциал роста. "
-        "300 тыс. ₽+ - комфортный ориентир, но не жесткий порог."
+        "300000+ - комфортный ориентир, но не жесткий порог."
     )
 
 
@@ -1630,10 +2013,13 @@ class HHChatRunner:
             )
 
         chat_messages = self._read_chat_messages()
+        chat_context = format_chat_context(chat_messages)
         question = extract_latest_question_from_messages(chat_messages, preview.preview)
         if question is None:
             conversation_text = self._body_text()
             question = extract_latest_question(conversation_text, preview.preview)
+            if not chat_context:
+                chat_context = conversation_text
         if is_closed_chat_text(question):
             return HHChatReplyResult(preview.chat_id, preview.title, "skipped_closed", question, "", preview.url, "Closed chat marker detected")
         if not is_reply_candidate(question):
@@ -1645,6 +2031,20 @@ class HHChatRunner:
                 "",
                 preview.url,
                 "No employer question detected",
+            )
+        low_fit_reason = low_fit_chat_title_reason(preview.title)
+        if low_fit_reason and low_fit_chat_title_guard_enabled():
+            return HHChatReplyResult(
+                preview.chat_id,
+                preview.title,
+                "blocked_low_fit_title",
+                question,
+                "",
+                preview.url,
+                (
+                    f"Low-fit chat title blocked ({low_fit_reason}); target is Python Backend, "
+                    "AI AgentOps, and strong AI product/backend projects"
+                ),
             )
         google_form_links = extract_google_form_links(question)
         if google_form_links:
@@ -1663,7 +2063,7 @@ class HHChatRunner:
         if self.state.was_answered(preview.chat_id, question):
             return HHChatReplyResult(preview.chat_id, preview.title, "skipped_duplicate", question, "", preview.url, "Question was already answered by this runner")
 
-        draft = generate_hh_chat_reply(question, self.profile)
+        draft = generate_hh_chat_reply(question, self.profile, context=chat_context)
         if "manual_required" in draft.reasons:
             return HHChatReplyResult(
                 preview.chat_id,
@@ -1702,6 +2102,33 @@ class HHChatRunner:
     def _targets_payload(targets: list[ExternalTarget]) -> list[dict[str, Any]]:
         return [asdict(target) for target in targets]
 
+    def _send_plain_chat_reply(self, message: str) -> tuple[str, str]:
+        filled_selector = self._fill_first_available(MESSAGE_INPUT_SELECTORS, message)
+        if not filled_selector:
+            return "form_not_found", "Could not find HH chat message input"
+        clicked_selector = self._click_first_available(SEND_BUTTON_SELECTORS)
+        if not clicked_selector:
+            return "send_button_not_found", "Could not find HH chat send button"
+
+        self._safe_pause(1500)
+        verified = self._message_sent_confirmed(message)
+        status = "sent" if verified else "sent_unverified"
+        return status, f"Clicked {clicked_selector}; filled {filled_selector}"
+
+    def _maybe_send_external_ack(self, preview: HHChatPreview, question: str) -> tuple[str | None, str, str | None]:
+        message = external_handoff_ack_message(question, self.profile)
+        if not external_handoff_ack_enabled() or self.state.was_answered(preview.chat_id, question):
+            return None, message, None
+        status, detail = self._send_plain_chat_reply(message)
+        if status in {"sent", "sent_unverified"}:
+            self.state.mark_answered(
+                chat_id=preview.chat_id,
+                question=question,
+                reply=message,
+                status=f"external_ack_{status}",
+            )
+        return status, message, detail
+
     def _handle_external_handoff(
         self,
         preview: HHChatPreview,
@@ -1714,6 +2141,7 @@ class HHChatRunner:
         prepared = generate_prepared_external_response(question, self.profile)
         payload = self._targets_payload(targets)
         target_key = "|".join(target.value for target in targets)
+        external_result: dict[str, Any] = {"prepared_answers": [asdict(item) for item in prepared.answers]}
 
         if not send:
             return HHChatReplyResult(
@@ -1725,8 +2153,12 @@ class HHChatRunner:
                 preview.url,
                 ",".join(prepared.reasons),
                 payload,
-                {"prepared_answers": [asdict(item) for item in prepared.answers]},
+                external_result,
             )
+
+        ack_status, ack_message, ack_detail = self._maybe_send_external_ack(preview, question)
+        if ack_status:
+            external_result["hh_ack_status"] = ack_status
 
         if self.state.was_external_handled(
             chat_id=preview.chat_id,
@@ -1734,6 +2166,18 @@ class HHChatRunner:
             target=target_key,
             action="alert",
         ):
+            if ack_status in {"sent", "sent_unverified"}:
+                return HHChatReplyResult(
+                    preview.chat_id,
+                    preview.title,
+                    ack_status,
+                    question,
+                    ack_message,
+                    getattr(self.page, "url", preview.url),
+                    f"HH external handoff ack sent; external alert already existed; {ack_detail}",
+                    payload,
+                    external_result,
+                )
             return HHChatReplyResult(
                 preview.chat_id,
                 preview.title,
@@ -1743,10 +2187,22 @@ class HHChatRunner:
                 preview.url,
                 "External alert was already sent by this runner",
                 payload,
-                {"prepared_answers": [asdict(item) for item in prepared.answers]},
+                external_result,
             )
 
         if self.alert_notifier is None:
+            if ack_status in {"sent", "sent_unverified"}:
+                return HHChatReplyResult(
+                    preview.chat_id,
+                    preview.title,
+                    ack_status,
+                    question,
+                    ack_message,
+                    getattr(self.page, "url", preview.url),
+                    f"HH external handoff ack sent; Telegram alert notifier is not configured; {ack_detail}",
+                    payload,
+                    external_result,
+                )
             return HHChatReplyResult(
                 preview.chat_id,
                 preview.title,
@@ -1756,7 +2212,7 @@ class HHChatRunner:
                 preview.url,
                 "External handoff detected, but Telegram alert notifier is not configured",
                 payload,
-                {"prepared_answers": [asdict(item) for item in prepared.answers]},
+                external_result,
             )
 
         alert = ExternalHandoffAlert(
@@ -1779,7 +2235,7 @@ class HHChatRunner:
                 preview.url,
                 f"Telegram alert failed: {type(exc).__name__}",
                 payload,
-                {"prepared_answers": [asdict(item) for item in prepared.answers]},
+                external_result,
             )
 
         self.state.mark_external_handled(
@@ -1790,6 +2246,18 @@ class HHChatRunner:
             status="external_alert_sent",
             message=prepared.copy_paste_message,
         )
+        if ack_status in {"sent", "sent_unverified"}:
+            return HHChatReplyResult(
+                preview.chat_id,
+                preview.title,
+                ack_status,
+                question,
+                ack_message,
+                getattr(self.page, "url", preview.url),
+                f"HH external handoff ack sent; Telegram alert sent; {ack_detail}",
+                payload,
+                external_result,
+            )
         return HHChatReplyResult(
             preview.chat_id,
             preview.title,
@@ -1799,7 +2267,7 @@ class HHChatRunner:
             preview.url,
             "Telegram alert sent for external recruiter handoff",
             payload,
-            {"prepared_answers": [asdict(item) for item in prepared.answers]},
+            external_result,
         )
 
     def _handle_google_form_question(

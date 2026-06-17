@@ -5,6 +5,14 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - dependency is optional for library imports
+    load_dotenv = None
+
+if load_dotenv is not None:
+    load_dotenv()
+
 from app.responses import ApplicantProfile, CaseStudy
 from app.scoring import CandidateProfile
 
@@ -37,8 +45,10 @@ def _default_profile_path() -> Path | None:
     explicit = os.getenv("HH_PROFILE_PATH")
     if explicit:
         return Path(explicit)
-    candidate = Path(os.getenv("HH_PROFILE_PATH", "./data/profile.example.json"))
-    return candidate if candidate.exists() else None
+    for candidate in (Path("./data/profile.aleksandr.json"), Path("./data/profile.example.json")):
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def _load_profile_data() -> dict:
@@ -143,6 +153,13 @@ def default_applicant_profile() -> ApplicantProfile:
             ],
             portfolio_url=data.get("portfolio_url") or None,
             website_url=data.get("website_url") or None,
+            github_url=data.get("github_url") or None,
+            proof_pack_url=(
+                data.get("proof_pack_url")
+                or data.get("case_pack_url")
+                or data.get("evidence_pack_url")
+                or None
+            ),
             location=(
                 os.getenv("HH_PROFILE_LOCATION") or data.get("location") or data.get("city") or None
             ),
@@ -154,6 +171,7 @@ def default_applicant_profile() -> ApplicantProfile:
                 or data.get("telegram_username")
                 or None
             ),
+            telegram_channel=data.get("telegram_channel") or None,
             age=_optional_positive_int(os.getenv("HH_PROFILE_AGE"), data.get("age")),
             phone=(
                 os.getenv("HH_PROFILE_PHONE") or data.get("phone") or data.get("phone_number") or None

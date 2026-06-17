@@ -3,14 +3,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 from app.agent import JobSearchAgent
-from app.auto_apply import AutoApplySettings, run_auto_apply_once
+from app.auto_apply import AutoApplySettings, _quality_checked_drafts, run_auto_apply_once
 from app.config import default_applicant_profile, default_candidate_profile, get_settings
 from app.db import initialize_database
 from app.google_forms import ConservativeGoogleFormRunner
-from app.hh_browser import HHWebApplyRunner, row_to_apply_draft
+from app.hh_browser import HHWebApplyRunner
 from app.hh_chat import (
     ExternalHandoffAlert,
     HHChatReplyState,
@@ -41,6 +42,36 @@ def _env_flag(name: str, default: bool = False) -> bool:
 
 def _hh_chat_live_send_allowed() -> bool:
     return _env_flag("HH_CHAT_REPLY_SEND") and _env_flag("HH_CHAT_REPLY_ALLOW_LIVE_SEND")
+
+
+def _hh_chat_reply_send_enabled(args: argparse.Namespace) -> bool:
+    if not bool(args.send):
+        return False
+    if _hh_chat_live_send_allowed():
+        return True
+    print(
+        "HH chat replies: live send blocked (--send); set HH_CHAT_REPLY_SEND=1 and "
+        "HH_CHAT_REPLY_ALLOW_LIVE_SEND=1",
+        file=sys.stderr,
+    )
+    return False
+
+
+def _hh_auto_apply_live_send_allowed() -> bool:
+    return _env_flag("HH_AUTO_APPLY_SEND") and _env_flag("HH_AUTO_APPLY_ALLOW_LIVE_SEND")
+
+
+def _hh_browser_submit_enabled(args: argparse.Namespace) -> bool:
+    if not bool(args.send):
+        return False
+    if _hh_auto_apply_live_send_allowed():
+        return True
+    print(
+        "HH auto-apply: live send blocked (--send); set HH_AUTO_APPLY_SEND=1 and "
+        "HH_AUTO_APPLY_ALLOW_LIVE_SEND=1",
+        file=sys.stderr,
+    )
+    return False
 
 
 def _hh_chat_external_submit_enabled(args: argparse.Namespace) -> bool:
@@ -235,20 +266,27 @@ def cmd_apply_browser_queue(args: argparse.Namespace) -> None:
     settings = get_settings()
     repo = _repo()
     rows = repo.review_queue(min_score=args.min_score, limit=args.limit, include_demo=args.include_demo)
-    drafts = [row_to_apply_draft(row) for row in rows]
+    drafts, quality_issues = _quality_checked_drafts(
+        repo=repo,
+        rows=rows,
+        applicant_profile=default_applicant_profile(),
+    )
     user_data_dir = args.user_data_dir or settings.hh_browser_user_data_dir
-    runner = HHWebApplyRunner.launch(user_data_dir=user_data_dir, headless=args.headless)
-    try:
-        results = runner.run(drafts, send=args.send)
-        _keep_browser_open_for_review(args.keep_open, results)
-    finally:
-        runner.close()
+    send_enabled = _hh_browser_submit_enabled(args)
+    results = []
+    if drafts:
+        runner = HHWebApplyRunner.launch(user_data_dir=user_data_dir, headless=args.headless)
+        try:
+            results = runner.run(drafts, send=send_enabled)
+            _keep_browser_open_for_review(args.keep_open, results)
+        finally:
+            runner.close()
 
     sent = 0
     prepared = 0
     blocked = 0
     for result in results:
-        if result.status == "sent" and args.send:
+        if result.status == "sent" and send_enabled:
             sent += 1
             repo.record_feedback(
                 vacancy_id=result.vacancy_id,
@@ -265,10 +303,13 @@ def cmd_apply_browser_queue(args: argparse.Namespace) -> None:
         json.dumps(
             {
                 "queued": len(drafts),
+                "queue_candidates": len(rows),
                 "prepared": prepared,
                 "sent": sent,
                 "blocked": blocked,
-                "send_enabled": bool(args.send),
+                "quality_skipped": len(quality_issues),
+                "quality_issues": quality_issues,
+                "send_enabled": send_enabled,
                 "statuses": [result.status for result in results],
             },
             ensure_ascii=False,
@@ -284,6 +325,7 @@ def cmd_auto_apply(args: argparse.Namespace) -> None:
     user_data_dir = args.user_data_dir or settings.hh_browser_user_data_dir
     fetch_details = os.getenv("HH_AUTO_APPLY_FETCH_DETAILS", "1") == "1"
     require_details = fetch_details and os.getenv("HH_AUTO_APPLY_REQUIRE_DETAILS", "1") == "1"
+    send_enabled = _hh_browser_submit_enabled(args)
     runner = HHWebApplyRunner.launch(user_data_dir=user_data_dir, headless=args.headless)
     try:
         result = run_auto_apply_once(
@@ -303,8 +345,9 @@ def cmd_auto_apply(args: argparse.Namespace) -> None:
                 min_score=args.min_score,
                 limit=args.limit,
                 daily_limit=args.daily_limit,
-                send=args.send,
+                send=send_enabled,
                 include_demo=args.include_demo,
+                company_guard=args.company_guard,
             ),
         )
     finally:
@@ -319,6 +362,7 @@ def cmd_reply_hh_chats(args: argparse.Namespace) -> None:
     user_data_dir = args.user_data_dir or settings.hh_browser_user_data_dir
     state = HHChatReplyState(args.state_file)
     profile = default_applicant_profile()
+    send_enabled = _hh_chat_reply_send_enabled(args)
     external_submit = _hh_chat_external_submit_enabled(args)
     alert_notifier = _build_hh_chat_alert_notifier()
     try:
@@ -332,7 +376,7 @@ def cmd_reply_hh_chats(args: argparse.Namespace) -> None:
         runner.external_form_handler = ConservativeGoogleFormRunner(page=runner.page, profile=profile)
         try:
             result = runner.run(
-                send=args.send,
+                send=send_enabled,
                 limit=args.limit,
                 max_chats=args.max_chats,
                 external_submit=external_submit,
@@ -445,6 +489,15 @@ def build_parser() -> argparse.ArgumentParser:
     auto_apply.add_argument("--min-score", type=int, default=80)
     auto_apply.add_argument("--limit", type=int, default=5)
     auto_apply.add_argument("--daily-limit", type=int, default=5)
+    auto_apply.add_argument(
+        "--company-guard",
+        choices=("strict", "family", "off"),
+        default=os.getenv("HH_AUTO_APPLY_COMPANY_GUARD", "strict"),
+        help=(
+            "Company duplicate guard: strict blocks any previously handled employer, "
+            "family blocks only known noisy employer families such as Sber, off disables broad company blocking."
+        ),
+    )
     auto_apply.add_argument("--user-data-dir", default=None)
     auto_apply.add_argument("--headless", action="store_true")
     auto_apply.add_argument(

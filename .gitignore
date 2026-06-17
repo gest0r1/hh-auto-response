@@ -7,6 +7,12 @@ logs/
 *.db-*
 data/review_queue.md
 data/review_queue_today.md
+data/review_queue_preflight.md
+data/*.bak
+data/profile.local.json
+data/profile-sources/
+data/evidence-packs/
+data/private-notes/
 data/hh_chat_reply_state.json
 data/hh_telegram_*
 data/hh-browser-profile/

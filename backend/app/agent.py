@@ -20,11 +20,13 @@ class JobSearchAgent:
         hh_client: SearchClient,
         candidate_profile: CandidateProfile,
         applicant_profile: ApplicantProfile,
+        company_guard: str = "strict",
     ) -> None:
         self.repo = repo
         self.hh_client = hh_client
         self.candidate_profile = candidate_profile
         self.applicant_profile = applicant_profile
+        self.company_guard = company_guard
 
     def run_once(
         self,
@@ -40,8 +42,11 @@ class JobSearchAgent:
             "vacancies_saved": 0,
             "drafts_created": 0,
             "drafts_archived": 0,
+            "quality_failed": 0,
             "duplicates_skipped": 0,
             "semantic_duplicates_skipped": 0,
+            "company_duplicates_skipped": 0,
+            "quality_issues": [],
             "errors": [],
         }
         learning_weights = self.repo.get_learning_weights()
@@ -72,9 +77,24 @@ class JobSearchAgent:
                         stats["semantic_duplicates_skipped"] += 1
                         stats["drafts_archived"] += self.repo.archive_draft_application(vacancy_id)
                         continue
+                    if self.repo.has_company_application(
+                        company=vacancy.company,
+                        exclude_vacancy_id=vacancy_id,
+                        guard_mode=self.company_guard,
+                    ):
+                        stats["company_duplicates_skipped"] += 1
+                        stats["drafts_archived"] += self.repo.archive_draft_application(vacancy_id)
+                        continue
                     generated = generate_cover_letter(
                         ResponseContext(profile=self.applicant_profile, vacancy=vacancy, score=score.score)
                     )
+                    if generated.risk_flags:
+                        stats["quality_failed"] += 1
+                        stats["drafts_archived"] += self.repo.archive_draft_application(vacancy_id)
+                        stats["quality_issues"].append(
+                            f"{vacancy.external_id}: {', '.join(generated.risk_flags)}"
+                        )
+                        continue
                     self.repo.create_or_update_application(
                         vacancy_id,
                         cover_letter=generated.message,

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.db import connect, initialize_database
-from app.responses import sanitize_cover_letter_greeting
+from app.responses import sanitize_cover_letter
 from app.scoring import ScoreResult, Vacancy
 
 
@@ -28,7 +28,12 @@ def _row_dict(row: Any) -> dict[str, Any]:
 
 
 _ACTIVE_DUPLICATE_STATUSES = ("draft", "sent", "reply", "interview", "offer", "blocked", "rejected")
+_COMPANY_GUARD_MODES = {"strict", "family", "off"}
+_FAMILY_COMPANY_BUCKETS = {"sber"}
 _SPACE_RE = re.compile(r"\s+")
+_NON_WORD_RE = re.compile(r"[^a-zа-я0-9]+")
+_LEGAL_PREFIX_RE = re.compile(r"^(ооо|ао|пао|зао|ип)\s+")
+_LEGAL_SUFFIX_RE = re.compile(r"\s+(ооо|ао|пао|зао|ип)$")
 
 
 def _canonical_key(value: str | None) -> str:
@@ -37,8 +42,43 @@ def _canonical_key(value: str | None) -> str:
     return normalized
 
 
+def _company_bucket_key(company: str | None) -> str:
+    """Normalize an employer to a safety bucket used for broad anti-spam guards.
+
+    HH can expose large employers through multiple legal/brand names: for example
+    `Сбер. IT`, `Сбер. Data Science` and `SberTech`.  Exact company matching would
+    still spam the same employer family, so this bucket intentionally collapses
+    obvious aliases and strips legal noise.
+    """
+    normalized = _canonical_key(company)
+    normalized = _NON_WORD_RE.sub(" ", normalized)
+    normalized = _SPACE_RE.sub(" ", normalized).strip()
+    normalized = _LEGAL_PREFIX_RE.sub("", normalized)
+    normalized = _LEGAL_SUFFIX_RE.sub("", normalized).strip()
+    if normalized.startswith("сбер") or normalized.startswith("sber") or "sbertech" in normalized:
+        return "sber"
+    return normalized
+
+
 def _company_title_key(company: str | None, title: str | None) -> tuple[str, str]:
-    return (_canonical_key(company), _canonical_key(title))
+    return (_company_bucket_key(company), _canonical_key(title))
+
+
+def normalize_company_guard_mode(mode: str | None) -> str:
+    normalized = (mode or "strict").strip().lower()
+    return normalized if normalized in _COMPANY_GUARD_MODES else "strict"
+
+
+def _company_guard_applies(company: str | None, mode: str | None) -> bool:
+    normalized = normalize_company_guard_mode(mode)
+    if normalized == "off":
+        return False
+    bucket = _company_bucket_key(company)
+    if not bucket:
+        return False
+    if normalized == "family":
+        return bucket in _FAMILY_COMPANY_BUCKETS
+    return True
 
 
 def _review_item_from_row(row: Any) -> dict[str, Any]:
@@ -49,7 +89,7 @@ def _review_item_from_row(row: Any) -> dict[str, Any]:
     item["score_penalties"] = _loads(item.pop("score_penalties_json", "[]"), [])
     item["apply_url"] = item["raw"].get("apply_url") or item.get("url") or ""
     if "cover_letter" in item:
-        item["cover_letter"] = sanitize_cover_letter_greeting(str(item.get("cover_letter") or ""))
+        item["cover_letter"] = sanitize_cover_letter(str(item.get("cover_letter") or ""))
     return item
 
 
@@ -144,6 +184,43 @@ class CRMRepository:
             ).fetchall()
         return any(_company_title_key(row["company"], row["title"]) == target for row in rows)
 
+    def has_company_application(
+        self,
+        *,
+        company: str | None,
+        exclude_vacancy_id: int | None = None,
+        statuses: tuple[str, ...] = _ACTIVE_DUPLICATE_STATUSES,
+        guard_mode: str = "strict",
+    ) -> bool:
+        """Return True when this employer bucket already has an active application.
+
+        This is stricter than company+title dedupe. It prevents a noisy auto-apply
+        loop from sending many different roles to the same employer family every
+        day, which was observed with Sber/Сбер HH aliases.
+        """
+        if not _company_guard_applies(company, guard_mode):
+            return False
+        target = _company_bucket_key(company)
+        if not target or not statuses:
+            return False
+        placeholders = ", ".join("?" for _ in statuses)
+        params: list[Any] = list(statuses)
+        where = f"a.status IN ({placeholders})"
+        if exclude_vacancy_id is not None:
+            where += " AND v.id != ?"
+            params.append(exclude_vacancy_id)
+        with connect(self.db_path) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT v.company
+                FROM applications a
+                JOIN vacancies v ON v.id = a.vacancy_id
+                WHERE {where}
+                """,
+                tuple(params),
+            ).fetchall()
+        return any(_company_bucket_key(row["company"]) == target for row in rows)
+
     def create_or_update_application(
         self,
         vacancy_id: int,
@@ -153,7 +230,7 @@ class CRMRepository:
         resume_id: str | None = None,
         score_at_apply: int | None = None,
     ) -> int:
-        cover_letter = sanitize_cover_letter_greeting(cover_letter)
+        cover_letter = sanitize_cover_letter(cover_letter)
         with connect(self.db_path) as conn:
             existing = conn.execute("SELECT id, draft_version, status FROM applications WHERE vacancy_id = ?", (vacancy_id,)).fetchone()
             if existing:
@@ -193,7 +270,7 @@ class CRMRepository:
         cover_letter: str,
         status: str = "draft",
     ) -> bool:
-        cover_letter = sanitize_cover_letter_greeting(cover_letter)
+        cover_letter = sanitize_cover_letter(cover_letter)
         with connect(self.db_path) as conn:
             cur = conn.execute(
                 """
@@ -348,6 +425,7 @@ class CRMRepository:
         limit: int = 20,
         include_demo: bool = False,
         decisions: tuple[str, ...] = ("hot", "review"),
+        company_guard: str = "strict",
     ) -> list[dict[str, Any]]:
         where = "a.status = 'draft' AND v.score >= ?"
         params: list[Any] = [min_score]
@@ -375,20 +453,36 @@ class CRMRepository:
             ).fetchall()
         queue: list[dict[str, Any]] = []
         seen_signatures: set[tuple[str, str]] = set()
+        seen_company_buckets: set[str] = set()
         handled_statuses = tuple(status for status in _ACTIVE_DUPLICATE_STATUSES if status != "draft")
         for row in rows:
             item = _review_item_from_row(row)
-            signature = _company_title_key(str(item.get("company") or ""), str(item.get("title") or ""))
+            company = str(item.get("company") or "")
+            title = str(item.get("title") or "")
+            signature = _company_title_key(company, title)
+            company_bucket = _company_bucket_key(company)
             if signature in seen_signatures:
                 continue
+            company_bucket_guarded = _company_guard_applies(company, company_guard)
+            if company_bucket_guarded and company_bucket and company_bucket in seen_company_buckets:
+                continue
             if self.has_company_title_application(
-                company=str(item.get("company") or ""),
-                title=str(item.get("title") or ""),
+                company=company,
+                title=title,
                 exclude_vacancy_id=int(item["id"]),
                 statuses=handled_statuses,
             ):
                 continue
+            if self.has_company_application(
+                company=company,
+                exclude_vacancy_id=int(item["id"]),
+                statuses=handled_statuses,
+                guard_mode=company_guard,
+            ):
+                continue
             seen_signatures.add(signature)
+            if company_bucket_guarded and company_bucket:
+                seen_company_buckets.add(company_bucket)
             queue.append(item)
             if len(queue) >= limit:
                 break
@@ -449,7 +543,7 @@ class CRMRepository:
             raw = _loads(item.pop("raw_json", "{}"), {})
             item["apply_url"] = raw.get("apply_url") or item.get("url") or ""
             if "cover_letter" in item:
-                item["cover_letter"] = sanitize_cover_letter_greeting(str(item.get("cover_letter") or ""))
+                item["cover_letter"] = sanitize_cover_letter(str(item.get("cover_letter") or ""))
             top_vacancies.append(item)
 
         return {

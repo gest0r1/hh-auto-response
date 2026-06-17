@@ -32,6 +32,10 @@ def _run_script(
         "HH_AUTO_APPLY_ALLOW_LIVE_SEND",
         "HH_CHAT_REPLY_SEND",
         "HH_CHAT_REPLY_ALLOW_LIVE_SEND",
+        "HH_CHAT_REPLY_ANSWER_LOW_FIT",
+        "HH_CHAT_REPLY_ALL_TITLES",
+        "HH_CHAT_REPLY_ACK_EXTERNAL_HANDOFF",
+        "HH_CHAT_REPLY_ALL_MESSAGES",
         "HH_CHAT_EXTERNAL_SUBMIT",
         "HH_TELEGRAM_BOT_TOKEN",
         "HH_TELEGRAM_CHAT_ID",
@@ -92,6 +96,39 @@ def test_auto_apply_runner_allows_send_only_when_double_env_gate_is_set(tmp_path
     assert "--send" in calls[-1].split()
 
 
+def test_daily_auto_apply_wrapper_forces_dry_run_even_with_live_env(tmp_path):
+    result, calls = _run_script(
+        "scripts/run_hh_auto_apply_daily.sh",
+        tmp_path,
+        env={"HH_AUTO_APPLY_SEND": "1", "HH_AUTO_APPLY_ALLOW_LIVE_SEND": "1"},
+        python_env="HH_AUTO_APPLY_PYTHON",
+    )
+
+    assert result.returncode == 0
+    final_args = calls[-1].split()
+    assert "auto-apply" in final_args
+    assert "--send" not in final_args
+
+
+def test_auto_apply_live_approved_wrapper_sends_with_high_volume_defaults(tmp_path):
+    result, calls = _run_script(
+        "scripts/run_hh_auto_apply_live_approved.sh",
+        tmp_path,
+        python_env="HH_AUTO_APPLY_PYTHON",
+    )
+
+    assert result.returncode == 0
+    final_args = calls[-1].split()
+    assert "auto-apply" in final_args
+    assert "--send" in final_args
+    assert "--limit" in final_args
+    assert final_args[final_args.index("--limit") + 1] == "50"
+    assert "--daily-limit" in final_args
+    assert final_args[final_args.index("--daily-limit") + 1] == "50"
+    assert "--company-guard" in final_args
+    assert final_args[final_args.index("--company-guard") + 1] == "family"
+
+
 def test_hh_chat_runner_blocks_raw_live_flags_without_double_env_gate(tmp_path):
     result, calls = _run_script(
         "scripts/run_hh_chat_replies.sh",
@@ -136,3 +173,18 @@ def test_hh_chat_runner_blocks_external_submit_env_without_reply_live_gate(tmp_p
     assert result.returncode == 0
     assert "external submit blocked" in result.stderr
     assert "--external-submit" not in calls[-1].split()
+
+
+def test_hh_chat_approved_live_wrapper_is_fail_closed_by_default(tmp_path):
+    result, calls = _run_script(
+        "scripts/run_hh_chat_replies_live_approved.sh",
+        tmp_path,
+        env={"HH_CHAT_EXTERNAL_SUBMIT": "1"},
+        python_env="HH_CHAT_REPLY_PYTHON",
+    )
+
+    assert result.returncode == 0
+    final_args = calls[-1].split()
+    assert "reply-hh-chats" in final_args
+    assert "--send" not in final_args
+    assert "--external-submit" not in final_args

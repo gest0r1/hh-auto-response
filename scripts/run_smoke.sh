@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-export PYTHONPATH=backend
-export HH_CRM_DB_PATH="./data/hh_crm.sqlite3"
+# shellcheck source=load_project_env.sh
+source ./scripts/load_project_env.sh
+export PYTHONPATH="${PYTHONPATH:-backend}"
+export HH_CRM_DB_PATH="${HH_CRM_DB_PATH:-./data/hh_crm.sqlite3}"
 python -m app.cli init-db
 python -m app.cli seed-demo >/tmp/hh-crm-seed.json
 pytest -q

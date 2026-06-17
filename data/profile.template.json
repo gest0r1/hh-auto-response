@@ -1,55 +1,98 @@
 {
-  "full_name": "Александр Олегович",
-  "headline": "Full-stack developer / AI automation engineer",
-  "hh_profile_url": "",
-  "website_url": "",
-  "portfolio_url": "",
-  "github_url": "",
-  "resume_text": "",
+  "full_name": "Иван Иванов",
+  "headline": "Python Backend Engineer / AI Automation Engineer",
+  "positioning": "Короткое позиционирование: какой стек основной, какие задачи решаете, какие результаты уже были. Пишите только то, что можно честно подтвердить на интервью.",
+  "hh_profile_url": "https://hh.ru/resume/your-resume-id",
+  "website_url": "https://your-site.example",
+  "portfolio_url": "https://your-portfolio.example",
+  "github_url": "https://github.com/your-login",
+  "proof_pack_url": "https://disk.example/your-proof-pack",
+  "location": "Москва / удаленно / UTC+3",
+  "telegram": "@your_username",
+  "telegram_channel": "https://t.me/your_channel",
+  "phone": "",
+  "age": null,
   "target_roles": [
-    "full-stack",
-    "backend",
-    "AI automation",
-    "Telegram bots",
-    "CRM integrations"
+    "Python Backend Engineer",
+    "FastAPI Developer",
+    "AI Backend Engineer",
+    "LLM Backend Engineer",
+    "AI Automation Engineer",
+    "Full-stack Developer"
   ],
   "skills": [
-    "React",
-    "Next.js",
-    "Node.js",
     "Python",
     "FastAPI",
+    "Django",
     "PostgreSQL",
-    "Telegram",
-    "CRM",
-    "LLM"
+    "Redis",
+    "Docker",
+    "REST API",
+    "Background workers",
+    "React",
+    "Next.js",
+    "TypeScript",
+    "LLM",
+    "RAG",
+    "Telegram Bots",
+    "CI/CD"
   ],
   "preferred_keywords": [
+    "удаленно",
     "удалённо",
-    "долгосрочно",
-    "контракт",
-    "автоматизация",
-    "дашборд"
+    "backend",
+    "python",
+    "fastapi",
+    "llm",
+    "ai",
+    "agent",
+    "интеграции",
+    "долгосрочно"
   ],
   "stop_keywords": [
     "только офис",
-    "низкая ставка",
-    "холодные звонки"
+    "холодные звонки",
+    "1с без разработки",
+    "продажи без разработки",
+    "низкая ставка"
   ],
   "min_monthly_salary": 180000,
   "min_hourly_rate": null,
+  "salary_positioning": "Например: удаленно от 180000, комфортный ориентир 250000+, проектную ставку обсуждаю по нагрузке.",
+  "work_format": "Удаленно, full-time или контракт. Офис/гибрид только если это реально подходит.",
   "strengths": [
-    "быстро собираю рабочие MVP",
-    "делаю интеграции под бизнес-процессы",
-    "довожу до продакшена"
+    "основной production-стек: Python/FastAPI, PostgreSQL, Redis, Docker, REST API",
+    "умею делать интеграции, фоновые процессы, мониторинг и поддержку после запуска",
+    "есть кейсы с AI/LLM/RAG или автоматизацией бизнес-процессов"
+  ],
+  "weak_or_learning_stack": [
+    "Vue 3 - если опыта мало, пишите честно: базово знаком, production-основой не был",
+    "Kubernetes - если не основной опыт, не заявляйте как production-сильную сторону"
   ],
   "cases": [
     {
-      "title": "Название кейса",
-      "task": "Что нужно было сделать",
-      "stack": ["React", "Python", "Telegram"],
-      "result": "Измеримый результат",
-      "url": ""
+      "title": "Название проекта",
+      "company": "Компания или собственный проект",
+      "role": "Backend Engineer / Full-stack Developer",
+      "period": "2024-2025",
+      "task": "Какая была бизнес-задача",
+      "description": "Что именно сделали, какие части системы были вашей ответственностью",
+      "stack": [
+        "Python",
+        "FastAPI",
+        "PostgreSQL",
+        "Redis",
+        "Docker"
+      ],
+      "result": "Измеримый результат: быстрее, дешевле, стабильнее, больше заявок, меньше ручной работы",
+      "url": "https://case.example"
     }
-  ]
+  ],
+  "source_notes": {
+    "resume": "data/profile-sources/resume.md",
+    "hh_resume": "data/profile-sources/hh-resume.md",
+    "portfolio_links": "data/profile-sources/portfolio-links.md",
+    "cases": "data/profile-sources/cases.md",
+    "preferences": "data/profile-sources/preferences.md"
+  }
 }

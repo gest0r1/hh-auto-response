@@ -1,4 +1,4 @@
-from app.db import initialize_database
+from app.db import connect, initialize_database
 from app.repository import CRMRepository
 from app.scoring import ScoreResult, Vacancy
 
@@ -103,7 +103,8 @@ def test_repository_review_queue_can_include_demo_drafts_when_requested(tmp_path
 
 
 def test_repository_sanitizes_legacy_employer_greeting_in_review_queue(tmp_path):
-    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    db_path = tmp_path / "crm.sqlite3"
+    repo = CRMRepository(db_path)
     vacancy = Vacancy(
         external_id="hh-ip-legacy",
         title="Python AI Engineer",
@@ -117,7 +118,7 @@ def test_repository_sanitizes_legacy_employer_greeting_in_review_queue(tmp_path)
         vacancy_id,
         cover_letter=(
             "Здравствуйте, ИП Москвина Наталья Александровна! "
-            "Увидел вакансию «Python AI Engineer». По описанию это мой профиль."
+            "Увидел вакансию «Python AI Engineer». В Viably (2025–2026) делал CRM — автоматизацию."
         ),
         status="draft",
         score_at_apply=91,
@@ -125,12 +126,49 @@ def test_repository_sanitizes_legacy_employer_greeting_in_review_queue(tmp_path)
 
     queue_item = repo.review_queue(min_score=80, limit=5)[0]
     direct_item = repo.application_review_item(app_id)
+    with connect(db_path) as conn:
+        persisted_cover_letter = conn.execute(
+            "SELECT cover_letter FROM applications WHERE id = ?",
+            (app_id,),
+        ).fetchone()["cover_letter"]
 
     assert queue_item["cover_letter"].startswith("Здравствуйте! Увидел вакансию")
     assert "Здравствуйте, ИП" not in queue_item["cover_letter"]
     assert "ИП Москвина" not in queue_item["cover_letter"]
+    assert "2025-2026" in persisted_cover_letter
+    for cover_letter in [persisted_cover_letter, queue_item["cover_letter"]]:
+        assert "2025–2026" not in cover_letter
+        assert "«" not in cover_letter
+        assert "»" not in cover_letter
+        assert "—" not in cover_letter
+        assert "–" not in cover_letter
     assert direct_item is not None
     assert direct_item["cover_letter"] == queue_item["cover_letter"]
+    assert direct_item["cover_letter"] == persisted_cover_letter
+
+    assert repo.update_application_cover_letter(
+        app_id,
+        cover_letter='Здравствуйте! Обновил блок «CRM»: Viably (2025–2026) — интеграции.',
+        status="draft",
+    ) is True
+    updated_queue_item = repo.review_queue(min_score=80, limit=5)[0]
+    updated_direct_item = repo.application_review_item(app_id)
+    with connect(db_path) as conn:
+        updated_persisted_cover_letter = conn.execute(
+            "SELECT cover_letter FROM applications WHERE id = ?",
+            (app_id,),
+        ).fetchone()["cover_letter"]
+
+    assert "2025-2026" in updated_persisted_cover_letter
+    for cover_letter in [updated_persisted_cover_letter, updated_queue_item["cover_letter"]]:
+        assert "2025–2026" not in cover_letter
+        assert "«" not in cover_letter
+        assert "»" not in cover_letter
+        assert "—" not in cover_letter
+        assert "–" not in cover_letter
+    assert updated_direct_item is not None
+    assert updated_direct_item["cover_letter"] == updated_queue_item["cover_letter"]
+    assert updated_direct_item["cover_letter"] == updated_persisted_cover_letter
 
 
 def test_record_feedback_sent_sets_sent_at_and_counts_today(tmp_path):
@@ -294,6 +332,102 @@ def test_repository_review_queue_hides_draft_when_same_company_title_was_sent(tm
         exclude_vacancy_id=draft_id,
     ) is True
     assert repo.review_queue(min_score=80, limit=10) == []
+
+
+def test_repository_review_queue_hides_same_employer_family_after_sent(tmp_path):
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    sent_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-sber-sent",
+            title="MLOps специалист",
+            company="Сбер. IT",
+            description="MLOps, Python, LLM platform",
+            url="https://hh.ru/vacancy/sber-sent",
+        ),
+        ScoreResult(score=97, decision="hot", reasons=["sber sent"]),
+    )
+    draft_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-sber-draft",
+            title="Lead AI Engineer",
+            company="Сбер. Data Science",
+            description="AI engineering, Python",
+            url="https://hh.ru/vacancy/sber-draft",
+        ),
+        ScoreResult(score=96, decision="hot", reasons=["sber alias"]),
+    )
+    repo.create_or_update_application(sent_id, cover_letter="Здравствуйте!", status="sent", score_at_apply=97)
+    repo.create_or_update_application(draft_id, cover_letter="Здравствуйте!", status="draft", score_at_apply=96)
+
+    assert repo.has_company_application(company="SberTech", exclude_vacancy_id=draft_id) is True
+    assert repo.has_company_application(company="SberTech", exclude_vacancy_id=draft_id, guard_mode="family") is True
+    assert repo.review_queue(min_score=80, limit=10) == []
+    assert repo.review_queue(min_score=80, limit=10, company_guard="family") == []
+
+
+def test_repository_family_company_guard_allows_ordinary_company_different_title_after_sent(tmp_path):
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    sent_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-agentco-sent",
+            title="Python Backend Engineer",
+            company="AgentCo",
+            description="Python backend",
+            url="https://hh.ru/vacancy/agentco-sent",
+        ),
+        ScoreResult(score=97, decision="hot", reasons=["python"]),
+    )
+    draft_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-agentco-draft",
+            title="LLM Platform Engineer",
+            company="AgentCo",
+            description="LLM platform, Python",
+            url="https://hh.ru/vacancy/agentco-draft",
+        ),
+        ScoreResult(score=96, decision="hot", reasons=["llm"]),
+    )
+    repo.create_or_update_application(sent_id, cover_letter="Здравствуйте!", status="sent", score_at_apply=97)
+    repo.create_or_update_application(draft_id, cover_letter="Здравствуйте!", status="draft", score_at_apply=96)
+
+    assert repo.has_company_application(company="AgentCo", exclude_vacancy_id=draft_id) is True
+    assert repo.has_company_application(company="AgentCo", exclude_vacancy_id=draft_id, guard_mode="family") is False
+    assert repo.review_queue(min_score=80, limit=10) == []
+    assert [row["external_id"] for row in repo.review_queue(min_score=80, limit=10, company_guard="family")] == [
+        "hh-agentco-draft"
+    ]
+
+
+def test_repository_review_queue_allows_only_one_draft_per_employer_bucket(tmp_path):
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    first_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-one-company-1",
+            title="Python Backend Engineer",
+            company="AgentCo",
+            description="Python backend",
+            url="https://hh.ru/vacancy/one-company-1",
+        ),
+        ScoreResult(score=99, decision="hot", reasons=["python"]),
+    )
+    second_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-one-company-2",
+            title="LLM Platform Engineer",
+            company="AgentCo",
+            description="LLM platform",
+            url="https://hh.ru/vacancy/one-company-2",
+        ),
+        ScoreResult(score=98, decision="hot", reasons=["llm"]),
+    )
+    repo.create_or_update_application(first_id, cover_letter="Здравствуйте! 1", status="draft", score_at_apply=99)
+    repo.create_or_update_application(second_id, cover_letter="Здравствуйте! 2", status="draft", score_at_apply=98)
+
+    queue = repo.review_queue(min_score=80, limit=10)
+    family_queue = repo.review_queue(min_score=80, limit=10, company_guard="family")
+
+    assert [row["external_id"] for row in queue] == ["hh-one-company-1"]
+    assert [row["external_id"] for row in family_queue] == ["hh-one-company-1", "hh-one-company-2"]
 
 
 def test_repository_review_queue_includes_draft_and_no_api_apply_url(tmp_path):

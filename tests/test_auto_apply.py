@@ -2,7 +2,7 @@ from app.auto_apply import AutoApplySettings, run_auto_apply_once
 from app.hh_browser import BrowserApplyResult
 from app.repository import CRMRepository
 from app.responses import ApplicantProfile, CaseStudy
-from app.scoring import CandidateProfile, Vacancy
+from app.scoring import CandidateProfile, ScoreResult, Vacancy
 
 
 class FakeHHClient:
@@ -157,3 +157,58 @@ def test_auto_apply_respects_daily_limit_before_opening_browser(tmp_path):
     assert second["daily_limit_reached"] is True
     assert second["queued"] == 0
     assert blocked_runner.calls == []
+
+
+def test_auto_apply_archives_stale_bad_draft_before_browser_send(tmp_path):
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    vacancy = Vacancy(
+        external_id="hh-stale-bad-draft",
+        title="React Python CRM developer",
+        company="AgentCo",
+        description="Удалённо. CRM, Telegram bot, FastAPI, React.",
+        url="https://hh.ru/vacancy/stale-bad-draft",
+        salary_from=230000,
+        salary_to=280000,
+        currency="RUR",
+        schedule="remote",
+        skills=["React", "Python", "FastAPI", "Telegram", "CRM"],
+        raw={"apply_url": "https://hh.ru/applicant/vacancy_response?vacancyId=stale-bad-draft"},
+    )
+    vacancy_id = repo.upsert_vacancy(vacancy, ScoreResult(score=91, decision="hot"))
+    repo.create_or_update_application(
+        vacancy_id,
+        cover_letter=(
+            "Здравствуйте! По смыслу это близко к тому, чем я сейчас занимаюсь: CRM, Telegram bot, "
+            "FastAPI и React.\n\n"
+            "Могу быстро включиться: разобрать требования, предложить план реализации и собрать "
+            "первый рабочий контур.\n\n"
+            "Портфолио: https://portfolio.viably.dev"
+        ),
+        status="draft",
+        score_at_apply=91,
+    )
+    runner = FakeApplyRunner(status="sent")
+
+    result = run_auto_apply_once(
+        repo=repo,
+        search_client=EmptyHHClient(),
+        candidate_profile=candidate_profile(),
+        applicant_profile=applicant_profile(),
+        apply_runner=runner,
+        settings=AutoApplySettings(
+            queries=["Python React AI automation"],
+            min_score=80,
+            limit=5,
+            daily_limit=5,
+            send=True,
+        ),
+    )
+
+    assert runner.calls == []
+    assert result["queue_candidates"] == 1
+    assert result["queued"] == 0
+    assert result["quality_skipped"] == 1
+    assert result["quality_issues"][0]["external_id"] == "hh-stale-bad-draft"
+    assert "generic_repeated_template" in result["quality_issues"][0]["issues"]
+    assert repo.review_queue(min_score=80) == []
+    assert repo.dashboard_summary()["pipeline"]["archived"] == 1

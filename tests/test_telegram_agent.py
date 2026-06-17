@@ -16,6 +16,7 @@ from app.telegram_agent import (
     TelegramReviewSettings,
     deliver_startup_messages,
     format_help_message,
+    is_configured_telegram_chat_id,
     format_vacancy_message,
     register_command_menu,
     telegram_command_menu,
@@ -71,11 +72,11 @@ class FakeBot:
         return {"ok": True}
 
 
-def _draft(repo: CRMRepository, *, external_id: str, title: str, company: str = "AgentCo", score: int = 91) -> int:
+def _draft(repo: CRMRepository, *, external_id: str, title: str, company: str | None = None, score: int = 91) -> int:
     vacancy = Vacancy(
         external_id=external_id,
         title=title,
-        company=company,
+        company=company or f"AgentCo {external_id}",
         description="Удалённо. Python, LLM, Telegram, CRM.",
         url=f"https://hh.ru/vacancy/{external_id}",
         raw={"apply_url": f"https://hh.ru/applicant/vacancy_response?vacancyId={external_id}"},
@@ -99,6 +100,21 @@ def _draft(repo: CRMRepository, *, external_id: str, title: str, company: str = 
 
 def _texts(bot: FakeBot) -> str:
     return "\n".join(text for _chat_id, text, _markup in bot.messages)
+
+
+def test_saved_chat_id_ignores_placeholder_values(tmp_path) -> None:
+    chat_id_path = tmp_path / "chat_id"
+    settings = TelegramReviewSettings(chat_id_path=chat_id_path)
+    agent = HHTelegramReviewAgent(repo=CRMRepository(tmp_path / "crm.sqlite3"), bot=FakeBot(), settings=settings)
+
+    for value in ["", "0", "12345", "123456", "demo", "<HH_TELEGRAM_CHAT_ID>"]:
+        chat_id_path.write_text(value, encoding="utf-8")
+        assert is_configured_telegram_chat_id(value) is False
+        assert agent.saved_chat_id() is None
+
+    chat_id_path.write_text("-1001234567890", encoding="utf-8")
+    assert is_configured_telegram_chat_id("-1001234567890") is True
+    assert agent.saved_chat_id() == -1001234567890
 
 
 def test_telegram_command_menu_contains_all_text_commands() -> None:

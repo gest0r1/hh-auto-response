@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -60,8 +61,131 @@ def _salary_midpoint(vacancy: Vacancy) -> int | None:
     return round(sum(values) / len(values))
 
 
+_NEGATIVE_REMOTE_PATTERNS = (
+    re.compile(r"\bне\s+удаленно\b"),
+    re.compile(r"\bбез\s+удаленки\b"),
+    re.compile(r"\bудаленка\s+не\s+предусмотрена\b"),
+    re.compile(r"\bудаленная\s+работа\s+не\s+предусмотрена\b"),
+)
+
+
 def _is_remote(vacancy: Vacancy, text: str) -> bool:
-    return any(marker in text for marker in ["remote", "удаленно", "удаленная", "удаленка", "удалённо", "удалённая"])
+    normalized_text = _norm(text)
+    if any(pattern.search(normalized_text) for pattern in _NEGATIVE_REMOTE_PATTERNS):
+        return False
+    return any(
+        marker in normalized_text
+        for marker in ["remote", "удаленно", "удаленная", "удаленка", "удалённо", "удалённая"]
+    )
+
+
+_HARD_TITLE_STOP_TERMS = (
+    "c#",
+    ".net",
+    "dotnet",
+    "qa engineer",
+    "qa automation",
+    "sdet",
+    "software development engineer in test",
+    "qa автоматизатор",
+    "qa инженер",
+    "aqa",
+    "тестировщик",
+    "quality assurance",
+    "системный аналитик",
+    "business analyst",
+    "sales",
+    "продаж",
+    "маркетолог",
+    "php",
+    "symfony",
+    "laravel",
+    "bitrix",
+    "bitrix24",
+    "битрикс",
+    "битрикс24",
+    "odoo",
+    "стажер",
+    "intern",
+    "internship",
+    "head of it",
+    "руководитель it",
+    "appsec",
+    "application security",
+    "security",
+    "data engineer",
+    "data engineering",
+    "etl developer",
+    "bi developer",
+    "mlops специалист",
+    "mlops engineer",
+    "инженер mlops",
+    "technical writer",
+    "технический писатель",
+    "техписатель",
+    "документатор",
+    "documentation",
+    "copywriter",
+    "копирайтер",
+    "редактор",
+    "content writer",
+    "recruiter",
+    "it recruiter",
+    "talent manager",
+    "sourcer",
+    "рекрутер",
+    "ml engineer",
+    "ml инженер",
+    "ml developer",
+    "ml разработчик",
+    "machine learning engineer",
+    "инженер машинного обучения",
+    "embedded",
+    "embedded software",
+    "встроенного по",
+    "встроенного программного обеспечения",
+    "ии оператор",
+    "ai operator",
+    "оператор ии",
+)
+
+
+_HARD_TITLE_STOP_PATTERNS = (
+    # HH sometimes writes QA roles as "QA (auto/manual) backend"; substring terms like
+    # "qa automation" miss this, and it can look like a backend vacancy after keyword scoring.
+    (re.compile(r"\bqa\b"), "qa"),
+)
+
+
+_GO_TITLE_STOP_PATTERNS = (
+    (re.compile(r"\bgolang\b"), "golang"),
+    (re.compile(r"\bgo\s+(?:developer|engineer|разработчик|программист|backend|бекенд)\b"), "go разработчик"),
+    (re.compile(r"\b(?:developer|engineer|разработчик|программист|backend|бекенд)\s+(?:на\s+)?go\b"), "go разработчик"),
+)
+
+
+_OFFICE_ONLY_PATTERNS = (
+    (re.compile(r"\bважно:\s*работа\s+в\s+офисе\b"), "работа в офисе"),
+    (re.compile(r"\bработа\s+(?:в\s+офисе|из\s+офиса)\b"), "работа в офисе"),
+    (re.compile(r"\bв\s+офис(?:е)?\b"), "в офис"),
+)
+
+
+def _title_stop_penalties(title: str) -> list[str]:
+    normalized_title = _norm(title).replace("-", " ")
+    penalties = [term for term in _HARD_TITLE_STOP_TERMS if term in normalized_title]
+    penalties.extend(label for pattern, label in _HARD_TITLE_STOP_PATTERNS if pattern.search(normalized_title))
+    penalties.extend(label for pattern, label in _GO_TITLE_STOP_PATTERNS if pattern.search(normalized_title))
+    return penalties
+
+
+def _office_only_penalties(text: str, remote: bool) -> list[str]:
+    if remote:
+        return []
+    for pattern, label in _OFFICE_ONLY_PATTERNS:
+        if pattern.search(text):
+            return [label]
+    return []
 
 
 def _decision(score: int) -> str:
@@ -117,6 +241,21 @@ def score_vacancy(vacancy: Vacancy, profile: CandidateProfile) -> ScoreResult:
         score += 10
         reasons.append("remote/удалёнка")
 
+    office_text = _norm(" ".join([vacancy.title, vacancy.description]))
+    office_only_stops = _office_only_penalties(office_text, remote)
+    for stop in office_only_stops:
+        score -= 35
+        stop_reason = f"офис без удаленки: {stop}"
+        penalties.append(stop_reason)
+        reasons.append(stop_reason)
+
+    title_stops = _title_stop_penalties(vacancy.title)
+    for stop in title_stops:
+        score -= 35
+        stop_reason = f"стоп в названии: {stop}"
+        penalties.append(stop_reason)
+        reasons.append(stop_reason)
+
     midpoint = _salary_midpoint(vacancy)
     if profile.min_monthly_salary and midpoint:
         if midpoint >= profile.min_monthly_salary:
@@ -134,8 +273,10 @@ def score_vacancy(vacancy: Vacancy, profile: CandidateProfile) -> ScoreResult:
             score -= 5
             penalties.append(f"salary slightly below target: {midpoint}")
 
+    stop_keyword_matched = False
     for stop in profile.stop_keywords:
         if _contains(text, stop):
+            stop_keyword_matched = True
             score -= 20
             stop_reason = f"стоп-слово: {stop}"
             penalties.append(stop_reason)
@@ -150,6 +291,19 @@ def score_vacancy(vacancy: Vacancy, profile: CandidateProfile) -> ScoreResult:
                     reasons.append(f"learned preference: {term} +{learned_delta}")
                 else:
                     penalties.append(f"learned penalty: {term} {learned_delta}")
+
+    if title_stops:
+        # Hard title mismatches should stay out of the autonomous review/send path even when
+        # the vacancy is keyword-stuffed with preferred tech, remote work, and high salary.
+        score = min(score, 69)
+
+    if office_only_stops:
+        score = min(score, 69)
+
+    if stop_keyword_matched:
+        # Stop keywords are quality gates for autonomous outreach, not mild hints.
+        # A keyword-stuffed vacancy must not stay hot just because it also mentions Python/LLM.
+        score = min(score, 54)
 
     final_score = max(0, min(100, round(score)))
     return ScoreResult(score=final_score, decision=_decision(final_score), reasons=reasons, penalties=penalties)

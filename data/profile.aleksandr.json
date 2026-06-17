@@ -1,52 +1,61 @@
 {
   "full_name": "Александр Олегович",
   "portfolio_url": "https://portfolio.viably.dev",
+  "github_url": "https://github.com/Glour/dashboard-ai-office",
+  "proof_pack_url": "https://disk.yandex.ru/d/TZHMyvaIDRYoeg",
   "portfolio_verified_url": "https://portfolio.viably.dev/ru",
-  "source_document": "/root/.hermes/cache/documents/doc_1167395fc4c6_hh_resume_hh_blocks.md",
-  "updated_at": "2026-05-18T19:35:00+00:00",
-  "headline": "Python Backend Engineer / AI Agent Systems / AgentOps",
-  "positioning": "Python backend engineer: FastAPI/Django, REST API, PostgreSQL/Redis, интеграции, фоновые workers, Docker, деплой и production-support. Сильная специализация сверху - AI agents, LLM, AgentOps/AI Platform: агентные контуры, RAG, Telegram/Web-интерфейсы, memory/retrieval, LLM-proxy, мониторинг и recovery.",
+  "source_document": "/root/home/headhunter-crm-agent/data/hh_resume_hh_blocks.md",
+  "updated_at": "2026-06-04T08:04:02+00:00",
+  "headline": "Python Backend Developer / AI Backend Engineer / AgentOps",
+  "positioning": "Python backend developer с сильной AI/AgentOps специализацией: FastAPI/Django, REST API, PostgreSQL/Redis, интеграции, фоновые workers, Docker, деплой и production-support. Сверху - AI backend, LLM/RAG, AI agents, Telegram/Web-интерфейсы, memory/retrieval, LLM-proxy, мониторинг и recovery. Архитектура и DevOps идут как усиление backend-профиля, а не как отдельная дорогая architect-only роль.",
   "target_roles": [
-    "Python Backend Engineer",
     "Python Backend Developer",
     "Backend Python Developer",
-    "Backend Engineer",
+    "Python Backend Engineer",
+    "Junior Python Backend Developer",
+    "Middle Python Backend Developer",
+    "Senior Python Backend Developer",
+    "Lead Python Backend Developer",
+    "Team Lead Python Developer",
+    "AI Backend Developer",
+    "AI Backend Engineer",
+    "Python AI Developer",
+    "LLM Backend Engineer",
     "FastAPI Developer",
     "Django Backend Developer",
     "Backend Integrations Engineer",
     "API Integrations Developer",
-    "AI Backend Engineer",
-    "LLM Backend Engineer",
-    "Full-stack Developer",
-    "Platform Architect",
-    "Tech Lead",
-    "AI Infrastructure Engineer",
+    "AgentOps Engineer",
     "AI Automation Engineer",
+    "AI Product Engineer",
+    "LLM Platform Engineer",
+    "DevOps/Platform Engineer",
+    "Platform Engineer",
     "Telegram Bot Developer",
     "CRM Integrations Developer",
-    "DevOps/Platform Engineer",
-    "AI Agent Systems Architect",
-    "AgentOps Engineer",
-    "LLM Platform Engineer",
-    "AI Delivery Lead",
-    "AI Product Engineer",
-    "AI Implementation Engineer",
+    "Full-stack Developer",
+    "Tech Lead",
     "Multi-agent Systems Engineer",
-    "Prompt / Agent Systems Engineer",
-    "AI Automation Architect"
+    "Prompt / Agent Systems Engineer"
   ],
   "skills": [
     "Python Backend",
-    "Backend Architecture",
-    "API integrations",
-    "REST API",
+    "Python",
     "FastAPI",
     "Django",
+    "REST API",
     "PostgreSQL",
     "Redis",
     "Docker",
     "Background workers",
-    "Python",
+    "API integrations",
+    "AI Backend",
+    "AI agents",
+    "LLM",
+    "RAG",
+    "AgentOps",
+    "DevOps",
+    "Backend Architecture",
     "React",
     "Next.js",
     "Node.js",
@@ -67,10 +76,8 @@
     "JWT",
     "RBAC",
     "Google OAuth",
-    "LLM",
     "Anthropic API",
     "Claude API",
-    "RAG",
     "Vector Search",
     "ML fine-tuning",
     "MinIO",
@@ -90,10 +97,7 @@
     "MEXC",
     "Gate",
     "Trading bots",
-    "DevOps",
     "Platform Architecture",
-    "AI agents",
-    "AgentOps",
     "Multi-agent systems",
     "Agentic workflows",
     "Agentic SDLC",
@@ -128,23 +132,44 @@
     "Prompt engineering",
     "промпт-инжиниринг",
     "Claude",
-    "GPT"
+    "GPT",
+    "Telethon",
+    "Celery",
+    "SQLAlchemy",
+    "Alembic",
+    "Playwright",
+    "AI command center",
+    "Postgres task ledger",
+    "Telegram automation runtime",
+    "Qdrant",
+    "n8n",
+    "Caddy",
+    "Google Sheets API",
+    "STT",
+    "Speech-to-text",
+    "Recharts",
+    "HeadHunter",
+    "HH.ru",
+    "Vacancy scoring",
+    "Browser automation",
+    "Duplicate guards",
+    "Quality gates"
   ],
   "strengths": [
-    "основной профиль - Python backend: FastAPI/Django, REST API, PostgreSQL/Redis, интеграции, фоновые процессы, Docker и production-поддержка",
-    "сильная специализация сверху - AI agents/LLM/AgentOps: роли, tools, routing, memory, retrieval, owner-return и проверки результата",
+    "основной профиль - Python backend developer: FastAPI/Django, REST API, PostgreSQL/Redis, интеграции, фоновые процессы, Docker и production-поддержка",
+    "сильная специализация сверху - AI backend/LLM/AgentOps: AI-агенты, RAG, роли, tools, routing, memory, retrieval, owner-return и проверки результата",
+    "архитектуру и DevOps использует как рабочее усиление backend-задач: деплой, мониторинг, recovery, CI/CD, инфраструктура и надежность",
     "строит backend/full-stack платформы с Telegram/Web, CRM, биллингом, деплоем, мониторингом и recovery после сбоев",
-    "умеет превращать AI-агентов в рабочие бизнес-контуры: продажи, support, контент, аналитика, админка и операционные процессы",
-    "закрывает полный цикл: архитектура, backend, frontend, DevOps, платежи, observability и QA gates"
+    "умеет превращать AI-агентов в рабочие бизнес-контуры: продажи, support, контент, аналитика, админка и операционные процессы"
   ],
-  "cases_count": 37,
+  "cases_count": 46,
   "cases": [
     {
       "id": 1,
       "title": "FPV40 Campus — LMS-платформа для FPV-пилотов",
       "company": "Собственные проекты / Частная практика",
-      "role": "Full-stack Developer / Tech Lead / Platform Architect",
-      "period": "2025–2026",
+      "role": "Python Backend / Full-stack Developer / Tech Lead",
+      "period": "2025 - май 2026",
       "description": "Полноценная LMS-платформа с микросервисной архитектурой для онлайн-обучения управлению FPV-дронами. 16 модулей, 134+ урока, 30+ интерактивных React-компонентов, система прогресса, сертификаты, биллинг через ЮКассу.",
       "achievements": [
         "4 микросервиса: auth (JWT/RBAC/Google OAuth), core (модули/квизы/прогресс/XP), media (MinIO/S3), Telegram-мониторинг",
@@ -170,8 +195,8 @@
       "id": 2,
       "title": "Signal.FPV40 — LMS для операторов БАС",
       "company": "Собственные проекты / Частная практика",
-      "role": "Full-stack Developer / Platform Architect",
-      "period": "2025–2026",
+      "role": "Full-stack Developer / Backend Developer",
+      "period": "2025 - май 2026",
       "description": "Образовательная платформа для обучения операторов беспилотных авиационных систем (БАС). 15+ модулей, интерактивные уроки, тесты, дашборд прогресса, ролевая модель доступа.",
       "achievements": [
         "15+ учебных модулей: от введения в систему БАС до программирования FC",
@@ -186,7 +211,7 @@
       "title": "FPV40.ru — Корпоративный сайт школы пилотов",
       "company": "Собственные проекты / Частная практика",
       "role": "Full-stack Developer",
-      "period": "2025–2026",
+      "period": "2025 - май 2026",
       "description": "Многостраничный корпоративный сайт школы FPV-пилотов с полноценной CMS-админкой для управления контентом, ценами и SEO. Next.js + PostgreSQL, SMTP-интеграция, Docker-деплой.",
       "achievements": [
         "Полноценная CMS-админка: управление страницами, ценами, курсами, SEO-метатегами",
@@ -205,8 +230,8 @@
       "id": 4,
       "title": "Viably — AI Product Platform",
       "company": "Собственные проекты / Частная практика",
-      "role": "Backend Engineer / Tech Lead / Platform Architect",
-      "period": "2025–2026",
+      "role": "Python Backend / AI Backend Engineer / Tech Lead",
+      "period": "2025 - май 2026",
       "description": "AI-платформа для генерации и деплоя цифровых продуктов: сайтов, веб-приложений и ботов. Построил и стабилизировал backend, pipeline генерации, preview runtime, deployment flow, OAuth, billing и production-инфраструктуру.",
       "achievements": [
         "AI generation pipeline для сайтов, webapp и ботов",
@@ -229,11 +254,188 @@
       ]
     },
     {
-      "id": 5,
+      "title": "AI Dev Office - центр управления AI-агентами",
+      "company": "Собственные проекты / Частная практика",
+      "role": "Python Backend / AI Platform Engineer / AgentOps",
+      "period": "январь 2026 - май 2026",
+      "description": "Персональный command center для команды AI-агентов: постановка задач через web-интерфейс и Telegram, маршрутизация по ролям, Postgres task ledger, Codex CLI для кодовых задач, QA-gates, артефакты, база знаний и vault metadata для секретов.",
+      "achievements": [
+        "Собрал единый интерфейс для задач, статусов, шагов, результатов и артефактов",
+        "Спроектировал оргструктуру AI-офиса: management, development, QA, marketing, security, knowledge",
+        "Сделал Postgres ledger для tasks, events, agent_runs, artifacts и qc_results",
+        "Настроил Codex-only policy для разработки: controlled wrappers, review flow, audit trail",
+        "Собрал owner-facing выдачу без технического шума: отчеты, файлы, статусы и блокеры"
+      ],
+      "stack": [
+        "Python",
+        "Next.js",
+        "React",
+        "TypeScript",
+        "PostgreSQL",
+        "Hermes Agent",
+        "Codex CLI",
+        "Playwright",
+        "Docker",
+        "Linux"
+      ],
+      "result": "Собрал единый интерфейс для задач, статусов, шагов, результатов и артефактов; Спроектировал оргструктуру AI-офиса: management, development, QA, marketing, security, knowledge",
+      "id": 5
+    },
+    {
+      "title": "whynotai Telegram Agents - платформа Telegram AI-агентов",
+      "company": "Собственные проекты / Частная практика",
+      "role": "Python Backend / Product Engineer / Telegram Automation",
+      "period": "ноябрь 2025 - май 2026",
+      "description": "SaaS-панель для управления Telegram-аккаунтами, прокси, прогревом, источниками и AI-кампаниями: комментарии, реакции, диалоги, чаты и рассылки. Runtime фиксирует лимиты, статусы, ошибки и отчеты, чтобы оператор видел управляемую систему, а не черный ящик.",
+      "achievements": [
+        "Реализовал импорт Telegram-сессий, контроль статусов, spam block, карантин и архив",
+        "Собрал proxy manager с проверкой Telegram-доступности, гео, пингом и лимитом аккаунтов на прокси",
+        "Настроил AI-кампании с источниками, промптом, частотой, стоп-словами, лимитами и XLSX-отчетами",
+        "Сделал Telethon live-listener для событийной обработки новых постов без тяжелого пакетного обхода",
+        "Добавил панели риска, operational events, heartbeat и прозрачные причины пропусков"
+      ],
+      "stack": [
+        "Python",
+        "FastAPI",
+        "React",
+        "TypeScript",
+        "PostgreSQL",
+        "Redis",
+        "Celery",
+        "Telethon",
+        "Docker",
+        "SQLAlchemy",
+        "Alembic",
+        "OpenAI-compatible API"
+      ],
+      "result": "Реализовал импорт Telegram-сессий, контроль статусов, spam block, карантин и архив; Собрал proxy manager с проверкой Telegram-доступности, гео, пингом и лимитом аккаунтов на прокси",
+      "url": "https://whynotai.ru",
+      "id": 6
+    },
+    {
+      "title": "WhyNotAI Studio - публичный лендинг AI-студии",
+      "company": "Собственные проекты / Частная практика",
+      "role": "Product Engineer / Frontend Developer / AI Studio Owner",
+      "period": "апрель 2026 - май 2026",
+      "description": "Публичный сайт студии практического ИИ: премиальная темная витрина с позиционированием, блоком услуг, методологией внедрения, сценариями применения и формой заявки на консультацию. Сайт объясняет AI-аудит, AI-агентов и обучение команды без лишнего шума и ведет пользователя к первому разговору.",
+      "achievements": [
+        "Собрал hero с понятным CTA на консультацию и премиальной темной визуальной системой",
+        "Спроектировал структуру лендинга: о студии, услуги, метод работы, сценарии применения, финальный CTA и форма заявки",
+        "Сделал отдельную страницу заявки с полями имени, контакта, темы и описания задачи",
+        "Написал UX-текст под AI-аудит, AI-агентов, обучение команды и первый разговор",
+        "Настроил адаптивную верстку, Nginx-деплой и Telegram CTA"
+      ],
+      "stack": [
+        "HTML",
+        "CSS",
+        "Responsive UI",
+        "UX writing",
+        "Landing page",
+        "Lead form",
+        "Nginx",
+        "Telegram CTA",
+        "Premium visual system"
+      ],
+      "result": "Собрал понятную витрину AI-студии: посетитель быстро видит услуги, метод работы, сценарии внедрения и может оставить заявку на консультацию.",
+      "url": "https://studio.whynotai.ru",
+      "id": "whynotai-studio"
+    },
+    {
+      "title": "AI-office X-ONE - платформа управления AI-офисом",
+      "company": "Собственные проекты / Частная практика",
+      "role": "Python Backend / AI Platform Engineer / Product Engineer",
+      "period": "июнь 2025 - май 2026",
+      "description": "Self-hosted web-центр для управления AI-офисом: задачи, агенты, маршруты, согласования, QC, база знаний, библиотека материалов, модельные маршруты и аналитика собраны в одном owner-facing интерфейсе.",
+      "achievements": [
+        "Собрал главный дашборд состояния, визуальную карту офиса и зоны внимания",
+        "Спроектировал агентные профили с ролями, маршрутами, знаниями, памятью и QC",
+        "Сделал backend/API и Postgres источником истины для задач, событий, материалов и статусов",
+        "Связал n8n как execution-layer для workflow и интеграций под контролем backend/runtime",
+        "Добавил RAG-контур, библиотеку материалов, модельные маршруты, fallback-логику и контроль затрат"
+      ],
+      "stack": [
+        "Python",
+        "FastAPI",
+        "Next.js",
+        "React",
+        "TypeScript",
+        "PostgreSQL",
+        "Qdrant",
+        "RAG",
+        "n8n",
+        "Docker Compose",
+        "Caddy",
+        "Telegram",
+        "LLM routing"
+      ],
+      "result": "Собрал платформенное ядро AI-офиса: владелец управляет задачами, агентами, маршрутами, знаниями, материалами и моделями через единый web-центр.",
+      "id": "ai-office-x-one"
+    },
+    {
+      "title": "Transoff AI Sales QA Platform - контроль качества звонков",
+      "company": "Собственные проекты / Частная практика",
+      "role": "Python Backend / AI Automation Engineer / Full-stack Developer",
+      "period": "октябрь 2025 - май 2026",
+      "description": "Production-контур для контроля качества звонков отдела продаж: система забирает звонки из телефонии, фильтрует значимые разговоры, расшифровывает аудио, оценивает диалог по бизнес-рубрикам и выводит результат в web-дашборд, Telegram и Google Sheets.",
+      "achievements": [
+        "Собрал worker для получения звонков, фильтрации, STT, AI-разбора и записи в PostgreSQL",
+        "Настроил классификацию сценариев: продажи, сервис, логистика, внутренние коммуникации и нерелевантные звонки",
+        "Реализовал оценку качества: балл, сильные стороны, слабые места, риск, следующий шаг и управленческий вывод",
+        "Собрал Next.js-дашборд с KPI, таблицей звонков, проблемной очередью, сильными звонками и статистикой сотрудников",
+        "Настроил Telegram-алерты только по важным сигналам и Google Sheets-отчеты с ежемесячной ротацией"
+      ],
+      "stack": [
+        "Python",
+        "Next.js",
+        "React",
+        "TypeScript",
+        "PostgreSQL",
+        "Telegram Bot API",
+        "Google Sheets API",
+        "STT",
+        "OpenAI-compatible API",
+        "Linux",
+        "systemd",
+        "Recharts"
+      ],
+      "result": "Автоматизировал управленческий контроль качества звонков: руководитель видит риски, сильные звонки, динамику сотрудников и готовые отчеты без ручного прослушивания всего потока.",
+      "id": "transoff-ai-sales-qa"
+    },
+    {
+      "title": "HeadHunter CRM Agent - агент для поиска работы и откликов",
+      "company": "Собственные проекты / Частная практика",
+      "role": "Python Backend / AgentOps / Automation Engineer",
+      "period": "февраль 2026 - май 2026",
+      "description": "Личный HH-агент для поиска вакансий, скоринга, генерации сопроводительных, безопасного browser-assisted отклика, CRM-учета, анализа воронки и контроля ответов в чатах HH.",
+      "achievements": [
+        "Собрал CRM на SQLite для вакансий, заявок, статусов, feedback events и run logs",
+        "Реализовал скоринг вакансий по ролям, стеку, зарплате, формату, stop keywords и learned weights",
+        "Настроил генерацию vacancy-first сопроводительных с proof-пулом и quality gates",
+        "Сделал browser-assisted отклик с dry-run по умолчанию, двойным live-gate, daily caps и duplicate guards",
+        "Добавил HH chat lane: dry-run анализ чатов, external handoff, ручной контроль и защиту от неправильных автоответов"
+      ],
+      "stack": [
+        "Python",
+        "SQLite",
+        "Playwright",
+        "FastAPI",
+        "Telegram Bot API",
+        "pytest",
+        "Hermes Agent",
+        "Cron",
+        "Linux",
+        "BeautifulSoup",
+        "LLM drafting"
+      ],
+      "result": "Собрал контролируемую систему поиска работы: вакансии проходят скоринг, отклики и чаты пишутся через safety gates, а вся воронка видна в CRM и отчетах.",
+      "id": "headhunter-crm-agent"
+    },
+    {
+      "id": 10,
       "title": "Vibegent — Мультитенантная AI-агент платформа",
       "company": "Собственные проекты / Частная практика",
-      "role": "Platform Architect / Backend Engineer / AI Infrastructure",
-      "period": "2025–2026",
+      "role": "AI Backend Engineer / Platform Engineer",
+      "period": "2025 - май 2026",
       "description": "Production-платформа пользовательских AI-агентов с кредитной системой, прокси к LLM, биллингом, Telegram-интерфейсами, воркер-нодами и инфраструктурой деплоя на Hetzner.",
       "achievements": [
         "Мультитенантная архитектура с изоляцией агентов по пользователям",
@@ -251,11 +453,11 @@
       ]
     },
     {
-      "id": 6,
+      "id": 11,
       "title": "vibegent-proxy — LLM Infrastructure Layer",
       "company": "Собственные проекты / Частная практика",
-      "role": "AI Infrastructure Engineer / Backend",
-      "period": "2025–2026",
+      "role": "AI Infrastructure Engineer / Python Backend",
+      "period": "2025 - май 2026",
       "description": "Резильентный прокси-слой между AI-агентами и Anthropic API: ротация токенов, per-token backoff, retry/fallback, кредитный контроль. Управление модельным слоем как инфраструктурой.",
       "achievements": [
         "Архитектура: Agent → vibegent-proxy → Anthropic (упрощение legacy-сложности)",
@@ -271,11 +473,11 @@
       ]
     },
     {
-      "id": 7,
+      "id": 12,
       "title": "Agent Cloud — Deploy Infrastructure на Hetzner",
       "company": "Собственные проекты / Частная практика",
-      "role": "Platform Engineer / Infrastructure Architect",
-      "period": "2025–2026",
+      "role": "Platform Engineer / DevOps Engineer",
+      "period": "2025 - май 2026",
       "description": "Облачная инфраструктура для деплоя AI-агентов на выделенных Hetzner воркер-нодах: remote Docker orchestration, автоскейлинг, изоляция воркнагрузок, DB-трекинг деплоев.",
       "achievements": [
         "Dedicated Hetzner worker nodes для пользовательских агентов",
@@ -291,11 +493,11 @@
       ]
     },
     {
-      "id": 8,
+      "id": 13,
       "title": "OpenClaw — Agent Runtime Operations",
       "company": "Собственные проекты / Частная практика",
       "role": "AI Ops Engineer / Platform Engineer",
-      "period": "2025–2026",
+      "period": "2025 - май 2026",
       "description": "Развёртывание, кастомизация и production-стабилизация OpenClaw как операционной среды для AI-агентов: gateway, browser, messaging, memory, model auth, persistent sessions.",
       "achievements": [
         "Deployment и операционализация OpenClaw окружений",
@@ -309,10 +511,10 @@
       ]
     },
     {
-      "id": 9,
+      "id": 14,
       "title": "ChainAlert - Мониторинг блокчейн транзакций",
       "company": "Собственные проекты / Частная практика",
-      "role": "Архитектор системы, Full-stack Developer",
+      "role": "Full-stack Developer / Backend Developer",
       "period": "2.5 недели",
       "description": "B2B/B2C SaaS-платформа для мониторинга Ethereum транзакций в реальном времени с уведомлениями в Telegram",
       "achievements": [
@@ -333,11 +535,11 @@
       ]
     },
     {
-      "id": 10,
+      "id": 15,
       "title": "Telegram Chat Analyzer - AI Portfolio Generator",
       "company": "Собственные проекты / Частная практика",
       "role": "Full-stack Developer / AI Engineer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Инструмент для автоматического создания портфолио разработчика из экспорта чатов Telegram с помощью Claude AI",
       "achievements": [
         "Автоматический анализ экспорта Telegram (JSON) через Claude API",
@@ -357,11 +559,11 @@
       ]
     },
     {
-      "id": 11,
+      "id": 16,
       "title": "Crypto Arbitrage Platform",
       "company": "Собственные проекты / Частная практика",
-      "role": "Архитектор системы, Backend/Engine Developer",
-      "period": "2025–2026 (уточнить)",
+      "role": "Python Backend / Trading Systems Developer",
+      "period": "2025 - май 2026",
       "description": "Платформа для поиска арбитражных возможностей между 20+ CEX и DEX в реальном времени",
       "achievements": [
         "Сбор данных с 20+ CEX через REST и WebSocket",
@@ -377,11 +579,11 @@
       ]
     },
     {
-      "id": 12,
+      "id": 17,
       "title": "Auto Trading Bot",
       "company": "Собственные проекты / Частная практика",
-      "role": "Архитектор, Core Execution Logic",
-      "period": "2025–2026 (уточнить)",
+      "role": "Backend Developer / Core Execution Logic",
+      "period": "2025 - май 2026",
       "description": "Трейдинг-бот для автоматического открытия и управления фьючерсными позициями (MEXC, Gate)",
       "achievements": [
         "Агрегация сигналов из API и Telegram-каналов",
@@ -398,11 +600,11 @@
       ]
     },
     {
-      "id": 13,
+      "id": 18,
       "title": "ChatGPT Telegram Bot (@AI_apps_bot)",
       "company": "Собственные проекты / Частная практика",
       "role": "Lead Developer / Tech Lead",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Комплексный AI-бот с генерацией контента и анализом документов",
       "achievements": [
         "Генерация текста, изображений, видео, голоса",
@@ -416,10 +618,10 @@
       ]
     },
     {
-      "id": 14,
+      "id": 19,
       "title": "MEXC Trade Synchronizer",
       "company": "Собственные проекты / Частная практика",
-      "role": "Архитектор и реализация",
+      "role": "Backend Developer / Trading Automation",
       "period": "2 месяца",
       "description": "Бот для синхронизации сделок между мейн-аккаунтом и N субаккаунтами с минимальной задержкой (MEXC Futures)",
       "achievements": [
@@ -435,11 +637,11 @@
       ]
     },
     {
-      "id": 15,
+      "id": 20,
       "title": "Magnet - Dating/Networking Mini App",
       "company": "Собственные проекты / Частная практика",
       "role": "Lead Backend Developer / Tech Lead",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Backend для Telegram Mini App с умным поиском специалистов и real-time обновлениями",
       "achievements": [
         "Аутентификация через Telegram InitData",
@@ -456,7 +658,7 @@
       ]
     },
     {
-      "id": 16,
+      "id": 21,
       "title": "BOP (Battle of Planets)",
       "company": "Собственные проекты / Частная практика",
       "role": "Backend Developer / Team Lead",
@@ -472,11 +674,11 @@
       "stack": []
     },
     {
-      "id": 17,
+      "id": 22,
       "title": "AI-ассистент ГОСТов (GostAssistent.ru)",
       "company": "Собственные проекты / Частная практика",
       "role": "AI/ML Developer, Backend Developer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "AI-ассистент для поиска в технической документации с векторным поиском",
       "achievements": [
         "Микросервисная архитектура",
@@ -490,11 +692,11 @@
       ]
     },
     {
-      "id": 18,
+      "id": 23,
       "title": "Sqrow Idle - Эко-френдли Майнинг",
       "company": "Собственные проекты / Частная практика",
       "role": "Backend Developer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Backend для майнинг-приложения с системой стейкинга, пулами, реферальной программой",
       "achievements": [
         "Создан полноценный backend для бота и веб-приложения",
@@ -504,11 +706,11 @@
       "stack": []
     },
     {
-      "id": 19,
+      "id": 24,
       "title": "Веб-сервис для генерации рифм",
       "company": "Собственные проекты / Частная практика",
       "role": "Fullstack Developer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Многопользовательский сервис для генерации рифм через 7 нейросетей",
       "achievements": [
         "Интеграция 7+ API",
@@ -518,11 +720,11 @@
       "stack": []
     },
     {
-      "id": 20,
+      "id": 25,
       "title": "Radugadesign Brief Bot",
       "company": "Собственные проекты / Частная практика",
       "role": "Backend Developer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Бот для приема брифов с автоматизацией воркфлоу",
       "achievements": [
         "Полная автоматизация приема заявок с валидацией",
@@ -533,12 +735,14 @@
       ]
     },
     {
-      "id": 21,
+      "id": 26,
       "title": "Сервис генерации описаний для Wildberries",
       "company": "Собственные проекты / Частная практика",
       "role": "Backend Developer / DevOps",
-      "period": "2025–2026 (уточнить)",
-      "description": "Автоматическая генерация описаний товаров с использованием GPT-3.5-turbo",
+      "period": "legacy / старая работа, примерно 2023 (уточнить)",
+      "visibility": "legacy_internal_not_employer_facing",
+      "notes": "Historical/internal record only. Do not use in HH employer-facing cover letters or proof packs: stale Wildberries/GPT-3.5 case.",
+      "description": "Legacy/internal кейс: автоматическая генерация описаний товаров с использованием GPT-3.5-turbo. Не использовать в HH сопроводительных.",
       "achievements": [
         "Миграция на новые версии API",
         "Решение проблем с блокировками",
@@ -547,11 +751,11 @@
       "stack": []
     },
     {
-      "id": 22,
+      "id": 27,
       "title": "Sqrow Chain (Blockchain)",
       "company": "Собственные проекты / Частная практика",
       "role": "Backend/Blockchain Developer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Блокчейн решение на базе Bitcoin, работа с протоколом Runes, собственный Layer 2",
       "achievements": [
         "Изучение Web3/blockchain с нуля",
@@ -563,11 +767,11 @@
       ]
     },
     {
-      "id": 23,
+      "id": 28,
       "title": "Generative Gallery Bot (Rotor Reviews)",
       "company": "Собственные проекты / Частная практика",
       "role": "Backend Developer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Бот для сбора отзывов с модерацией и публикацией",
       "achievements": [
         "Система модерации с голосованием",
@@ -576,12 +780,12 @@
       "stack": []
     },
     {
-      "id": 24,
-      "title": "@techgenai - Автономная нейросеть",
+      "id": 29,
+      "title": "Telegram content agent (архивный проект)",
       "company": "Собственные проекты / Частная практика",
       "role": "AI Engineer / Backend Developer",
-      "period": "2025–2026 (уточнить)",
-      "description": "Автономная нейросеть для ведения Telegram-канала с полностью автоматической генерацией и публикацией контента",
+      "period": "2025 - май 2026",
+      "description": "Архивный прототип контент-агента для Telegram-публикаций без активного публичного канала сейчас",
       "achievements": [
         "Полностью автономная система без участия человека"
       ],
@@ -590,11 +794,11 @@
       ]
     },
     {
-      "id": 25,
+      "id": 30,
       "title": "Fine-tuned ML модели",
       "company": "Собственные проекты / Частная практика",
       "role": "ML Engineer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Обучение и деплой узкопрофильных моделей на собственных данных",
       "achievements": [
         "Дообучение моделей для специфических задач"
@@ -602,11 +806,11 @@
       "stack": []
     },
     {
-      "id": 26,
+      "id": 31,
       "title": "Traffaldino Bot",
       "company": "Собственные проекты / Частная практика",
       "role": "Backend Developer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Бот для создания и управления событиями с проверкой подписок на каналы",
       "achievements": [
         "Реализация системы проверки подписок и событий"
@@ -614,11 +818,11 @@
       "stack": []
     },
     {
-      "id": 27,
+      "id": 32,
       "title": "Игровой бот Gейм'онитор",
       "company": "Собственные проекты / Частная практика",
       "role": "Full-stack Developer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Бот-тест на зависимость с системой подписки и реферальными ссылками",
       "achievements": [
         "Быстрая разработка (несколько дней)",
@@ -627,11 +831,11 @@
       "stack": []
     },
     {
-      "id": 28,
+      "id": 33,
       "title": "Система мониторинга и отчетности",
       "company": "Собственные проекты / Частная практика",
       "role": "Backend Developer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Система автоматической отправки ежедневных отчетов на почту с логами, статистикой, мониторингом ошибок",
       "achievements": [
         "Автоматизация контроля работы сервисов",
@@ -640,11 +844,11 @@
       "stack": []
     },
     {
-      "id": 29,
+      "id": 34,
       "title": "Защита от злоупотреблений API",
       "company": "Собственные проекты / Частная практика",
       "role": "Backend Developer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Система защиты от автоматических запросов с ограничением 10 запросов в 10 минут на пользователя",
       "achievements": [
         "Предотвращение несанкционированного использования API",
@@ -653,11 +857,11 @@
       "stack": []
     },
     {
-      "id": 30,
+      "id": 35,
       "title": "CRM-интеграции",
       "company": "Собственные проекты / Частная практика",
       "role": "Backend Developer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Интеграция бизнес-ботов и сервисов с CRM-системами",
       "achievements": [
         "Успешная интеграция с Bitrix24 и AmoCRM"
@@ -669,11 +873,11 @@
       ]
     },
     {
-      "id": 31,
+      "id": 36,
       "title": "Рекламный бот-ассистент",
       "company": "Собственные проекты / Частная практика",
       "role": "Backend Developer",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Бот для управления рекламой в Telegram с интеграцией Яндекс.Директ, статистикой, массовыми рассылками",
       "achievements": [
         "Реализация сложной системы статистики и аналитики"
@@ -683,11 +887,11 @@
       ]
     },
     {
-      "id": 32,
+      "id": 37,
       "title": "Бот доставки (@rs_dostavka_bot)",
       "company": "Собственные проекты / Частная практика",
       "role": "Consultant / Debugger",
-      "period": "2025–2026 (уточнить)",
+      "period": "2025 - май 2026",
       "description": "Диагностика проблем производительности, анализ архитектуры бота для курьерской службы",
       "achievements": [
         "Выявление проблем с роутингом и архитектурой",
@@ -696,11 +900,11 @@
       "stack": []
     },
     {
-      "id": 33,
+      "id": 38,
       "title": "Hermes Operator Contour — AgentOps Runtime",
       "company": "Собственные проекты / Частная практика",
-      "role": "AI Ops Engineer / Agent Runtime Architect",
-      "period": "2025–2026",
+      "role": "AgentOps Engineer / AI Runtime Engineer",
+      "period": "2025 - май 2026",
       "description": "Настройка Hermes Agent как рабочего операторского контура: Telegram gateway, persistent memory, skills, cron jobs, toolsets, local knowledge base, owner-context, reports, health checks и правила безопасной работы без утечки секретов.",
       "achievements": [
         "Собран слой HermesWiki/AgentCenter как source of truth для агента, проектов и owner-context",
@@ -723,11 +927,11 @@
       ]
     },
     {
-      "id": 34,
+      "id": 39,
       "title": "Heisenberg Team — многоагентная рабочая команда",
       "company": "Собственные проекты / Частная практика",
-      "role": "Multi-agent Systems Architect / Operator",
-      "period": "2025–2026",
+      "role": "Multi-agent Systems Engineer / Operator",
+      "period": "2025 - май 2026",
       "description": "Многоагентная команда с главным агентом, координатором и профильными ролями: разработка, маркетинг, документы, безопасность, оптимизация и research. Контур построен вокруг Board-First workflow, handoff, quality gate, памяти, briefing files и проверки результата.",
       "achievements": [
         "Спроектированы роли Heisenberg, Saul, Walter, Jesse, Skyler, Hank, Gus и Twins с разными зонами ответственности",
@@ -749,11 +953,11 @@
       ]
     },
     {
-      "id": 35,
+      "id": 40,
       "title": "AI Office / Agent Command Center — офис агентов",
       "company": "Собственные проекты / Частная практика",
       "role": "Full-stack Developer / Agent UX Designer",
-      "period": "2025–2026",
+      "period": "2025 - май 2026",
       "description": "Визуальный dashboard/AI-офис для управления агентной командой: комнаты/кабинеты агентов, статусы, задачи, визуальная модель команды, frontend-прототипы и проверяемый preview workflow.",
       "achievements": [
         "Собран agent-command-center/dashboard-ai-office как интерфейс для агентной команды",
@@ -772,11 +976,11 @@
       ]
     },
     {
-      "id": 36,
+      "id": 41,
       "title": "AI-отделы и бизнес-агенты для компаний",
       "company": "Собственные проекты / Частная практика",
-      "role": "AI Implementation Architect / Business Automation Engineer",
-      "period": "2025–2026",
+      "role": "AI Implementation Engineer / Business Automation Engineer",
+      "period": "2025 - май 2026",
       "description": "Проектирование AI-агентных контуров под реальные бизнес-процессы: продажи, support, лидогенерация, квалификация заявок, контент, аналитика, админка, CRM/таблицы, Telegram/Web поверхности, человек в контуре и контроль владельца.",
       "achievements": [
         "Упаковка AI-агентов как рабочих бизнес-ролей, а не как одиночного prompt/chatbot",
@@ -797,11 +1001,11 @@
       ]
     },
     {
-      "id": 37,
+      "id": 42,
       "title": "Media-capable Hermes/Vibegent agent wrappers",
       "company": "Собственные проекты / Частная практика",
       "role": "AI Integration Engineer / Telegram Bot Developer",
-      "period": "2025–2026",
+      "period": "2025 - май 2026",
       "description": "Интеграция AI-агентов с Telegram media-flow: текст, voice/audio, изображения, vision/STT, per-user conversation memory и безопасный polling lifecycle.",
       "achievements": [
         "Добавлен voice/audio path: download Telegram files, transcribe/STT, передача в agent flow",
@@ -818,6 +1022,75 @@
         "Vibegent",
         "Polling lifecycle"
       ]
+    },
+    {
+      "id": 43,
+      "title": "AI-маркетолог для Aklenpharma",
+      "company": "Aklenpharma / частный клиент",
+      "role": "AI Implementation Engineer / Marketing Automation Architect",
+      "period": "2025 - май 2026",
+      "description": "AI-агент для маркетинга БАДов: упаковка продукта, контент, рекламные материалы, безопасные формулировки без медицинских обещаний, сценарии для продаж и понятный процесс согласования.",
+      "achievements": [
+        "Разобран клиентский продукт, ограничения ниши и требования к безопасной коммуникации",
+        "Собран сценарий AI-маркетолога: идеи, тексты, упаковка, рекламные гипотезы и проверка формулировок",
+        "Подготовлены материалы, которые можно показывать работодателю как кейс AI-внедрения под бизнес-задачу"
+      ],
+      "stack": [
+        "AI agents",
+        "Marketing automation",
+        "Prompt architecture",
+        "Content workflow",
+        "Human-in-the-loop",
+        "Business process analysis"
+      ],
+      "url": "https://disk.yandex.ru/d/TZHMyvaIDRYoeg"
+    },
+    {
+      "id": 44,
+      "title": "AI Office для Transoff",
+      "company": "Transoff / частный клиент",
+      "role": "AI Office Engineer / Business Automation Engineer",
+      "period": "2025 - май 2026",
+      "description": "Концепция AI-офиса для операционных процессов: агентные роли под продажи, поддержку, контроль качества, документы и коммуникации, с привязкой к реальным бизнес-сценариям.",
+      "achievements": [
+        "Описаны роли AI-агентов и точки внедрения в рабочие процессы компании",
+        "Подготовлены ТЗ/КП, схемы и визуальные материалы для демонстрации решения",
+        "Сделан акцент на ROI: быстрее отвечать клиентам, меньше ручной рутины, прозрачнее контроль задач"
+      ],
+      "stack": [
+        "AI Office",
+        "Business agents",
+        "Workflow automation",
+        "CRM",
+        "Sales ops",
+        "Support automation",
+        "QA automation",
+        "Telegram/Web"
+      ],
+      "url": "https://disk.yandex.ru/d/TZHMyvaIDRYoeg"
+    },
+    {
+      "id": 45,
+      "title": "AI Office для X-ONE",
+      "company": "X-ONE / частный клиент",
+      "role": "Multi-agent Systems Engineer / AI Automation Engineer",
+      "period": "2025 - май 2026",
+      "description": "Многоагентный AI-офис для бизнес-команды: агенты с ролями, интерфейсами и зонами ответственности, рабочие сценарии, handoff, контроль владельца и презентационная упаковка.",
+      "achievements": [
+        "Спроектирована структура AI-офиса: роли, сценарии, интерфейсы, процессы и контроль результата",
+        "Подготовлены материалы для презентации решения клиенту: скриншоты, описание, ТЗ и коммерческая логика",
+        "Связана агентная архитектура с понятной бизнес-пользой, а не с абстрактным чат-ботом"
+      ],
+      "stack": [
+        "Multi-agent systems",
+        "AI Office",
+        "Agent roles",
+        "Workflow automation",
+        "Owner-return workflow",
+        "Agent UX",
+        "Business process analysis"
+      ],
+      "url": "https://disk.yandex.ru/d/TZHMyvaIDRYoeg"
     }
   ],
   "preferred_keywords": [
@@ -901,16 +1174,20 @@
   ],
   "min_monthly_salary": 100000,
   "salary_positioning": {
-    "active_hh_resume": "Архитектор высоконагруженных AI-систем / AI Solutions Architect",
+    "active_hh_resume": "Python Backend / AI Backend Developer",
     "active_hh_resume_salary_rub": 300000,
     "mass_outreach_monthly_rub": "100000-200000 для удаленных стабильных вариантов с быстрым стартом; 300000+ только комфортный ориентир для переговоров, не фильтр и не hard floor",
     "strong_fullstack_backend_ai_monthly_rub": "300000+ как комфортный ориентир для сильных совпадений, не минимальный порог",
     "architect_lead_ownership_monthly_rub": "500000-550000+",
-    "note": "Не использовать 300000+ как дефолт или нижнюю границу массовых откликов. 650000 ₽ не использовать как дефолт; только как якорь для редких CTO/Head/Architect scope."
+    "note": "Не использовать 300000+ как дефолт или нижнюю границу массовых откликов. 650000 ₽ не использовать как дефолт; только как якорь для редких CTO/Head/Architect scope.",
+    "conversion_resume_title": "Python Backend / AI Backend Developer",
+    "conversion_note": "Для HH не ставить architect первым словом: это режет воронку и уводит в senior/lead-only ожидания. Основной вход - Python Backend, AI Backend, FastAPI, Django, API, Docker; architecture/devops как усиление.",
+    "salary_test_options_rub": "300000 оставить как текущий якорь; если приглашений мало после смены заголовка, тестировать 250000 на отдельном резюме или копии."
   },
   "location": "Обнинск",
   "city": "Обнинск",
   "telegram": "@ne_stoit_togo",
+  "telegram_channel": null,
   "age": 25,
   "phone": "+79106053173",
   "phone_number": "+79106053173",
@@ -920,5 +1197,14 @@
     "comfortable_rub": "200000-300000+",
     "note": "300000 не жесткий порог. В текущей ситуации рассматривать удаленные варианты 100000-200000 ₽, если есть стабильность, быстрый старт или потенциал роста."
   },
-  "salary_strategy": "Сейчас приоритет - получить удаленную работу и деньги. Не отказывать работодателям из-за вилки 100000-200000 ₽; 300000 ₽ использовать как комфортный ориентир, не как фильтр."
+  "salary_strategy": "Сейчас приоритет - поднять конверсию в приглашения: не позиционироваться architect-first. Основной вход: Python Backend / AI Backend; 300000 использовать как текущий якорь, но для расширения воронки держать отдельный тест на 250000.",
+  "secondary_roles_low_priority": [
+    "Tech Lead",
+    "Solution Architect",
+    "Platform Architect",
+    "AI Agent Systems Architect"
+  ],
+  "commercial_development_start_year": 2021,
+  "commercial_development_experience": "около 5 лет коммерческой разработки, первые коммерческие проекты с 2021 года",
+  "python_commercial_experience": "около 5 лет, основной профиль Python Backend / AI Backend / AgentOps"
 }
