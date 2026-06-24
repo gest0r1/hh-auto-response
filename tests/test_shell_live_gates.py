@@ -47,7 +47,11 @@ def _run_script(
             "HH_CRM_DB_PATH": str(tmp_path / "crm.sqlite3"),
             "HH_TELEGRAM_SECRETS_FILE": str(tmp_path / "missing.env"),
             "HH_AUTO_APPLY_QUERIES": "Python Backend",
+            "HH_AUTO_APPLY_LIVE_SEND_DISABLED_FLAG": str(
+                tmp_path / "missing-hh-auto-apply-live-send-disabled.flag"
+            ),
             "HH_CHAT_REPLY_STATE_FILE": str(tmp_path / "hh-chat-state.json"),
+            "HH_CHAT_LIVE_SEND_DISABLED_FLAG": str(tmp_path / "missing-hh-chat-live-send-disabled.flag"),
             python_env: str(_stub_python(tmp_path)),
         }
     )
@@ -94,6 +98,26 @@ def test_auto_apply_runner_allows_send_only_when_double_env_gate_is_set(tmp_path
     assert result.returncode == 0
     assert "blocked --send" not in result.stderr
     assert "--send" in calls[-1].split()
+
+
+def test_auto_apply_runner_respects_emergency_disabled_flag(tmp_path):
+    disabled_flag = tmp_path / "hh-auto-apply-live-send-disabled.flag"
+    disabled_flag.write_text("blocked", encoding="utf-8")
+
+    result, calls = _run_script(
+        "scripts/run_hh_auto_apply.sh",
+        tmp_path,
+        env={
+            "HH_AUTO_APPLY_SEND": "1",
+            "HH_AUTO_APPLY_ALLOW_LIVE_SEND": "1",
+            "HH_AUTO_APPLY_LIVE_SEND_DISABLED_FLAG": str(disabled_flag),
+        },
+        python_env="HH_AUTO_APPLY_PYTHON",
+    )
+
+    assert result.returncode == 0
+    assert "live send blocked" in result.stderr
+    assert "--send" not in calls[-1].split()
 
 
 def test_daily_auto_apply_wrapper_forces_dry_run_even_with_live_env(tmp_path):

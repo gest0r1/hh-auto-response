@@ -45,6 +45,10 @@
 - Кейс: только из профиля, портфолио или сохраненного owner context, без фантазии.
 - Период и роль: использовать только когда это повышает доверие, не превращать абзац в резюме-таблицу.
 - AI/AgentOps/LLMOps: выбирать 1-2 самых точных доказательства из Vibegent, Viably, Hermes Operator, Heisenberg Team, OpenClaw, AI Office или похожих кейсов.
+- Для generic Python/backend/API откликов не начинать по умолчанию с Viably: если подходит задача, выше ставить whynotai Telegram Agents, Transoff AI Sales QA Platform и Crypto Arbitrage Platform (30+ CEX/DEX).
+- Для Telegram/ботов/кампаний первым proof-кейсом обычно брать whynotai Telegram Agents.
+- Для бизнес-автоматизации, call QA, дашбордов, алертов, отчетности и интеграций с операционными процессами обычно брать Transoff AI Sales QA Platform.
+- Для real-time data, WebSocket/REST market data, алгоритмов, бирж, crypto/trading/blockchain и integration-heavy backend обычно брать Crypto Arbitrage Platform.
 - Kwork/freelance: можно писать острее, если объявление позволяет. Дерзость должна держаться на фактах: код, архитектура, деплой, бизнес-результат.
 - Площадки без внешних ссылок: портфолио не добавлять, доверие усиливать через стек, кейс и рабочий результат.
 - Proof pack: если работодатель отдельно просит ссылки или подтверждения в доп. блоке, не выдумывать GitHub и не писать `GitHub`, когда URL нет; использовать portfolio_url, telegram, proof_pack_url/Yandex Disk и выбранные кейсы.

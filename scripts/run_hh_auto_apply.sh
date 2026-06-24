@@ -6,6 +6,20 @@ source ./scripts/load_project_env.sh
 
 export PYTHONPATH="${PYTHONPATH:-backend}"
 export HH_CRM_DB_PATH="${HH_CRM_DB_PATH:-./data/hh_crm.sqlite3}"
+export HH_USER_AGENT="${HH_USER_AGENT:-Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36}"
+
+# Emergency fail-closed lock: after a wrong-resume incident, block all live HH
+# auto-apply sends even if --send/HH_AUTO_APPLY_ALLOW_LIVE_SEND are provided.
+# Dry-runs still work. Remove the flag only after the resume is verified.
+HH_AUTO_APPLY_LIVE_SEND_DISABLED_FLAG="${HH_AUTO_APPLY_LIVE_SEND_DISABLED_FLAG:-./data/hh_auto_apply_live_send_disabled.flag}"
+HH_AUTO_APPLY_LIVE_SEND_DISABLED=0
+if [[ -f "$HH_AUTO_APPLY_LIVE_SEND_DISABLED_FLAG" ]]; then
+  if [[ "${HH_AUTO_APPLY_SEND:-0}" == "1" || "${HH_AUTO_APPLY_ALLOW_LIVE_SEND:-0}" == "1" ]]; then
+    HH_AUTO_APPLY_LIVE_SEND_DISABLED=1
+  fi
+  export HH_AUTO_APPLY_SEND=0
+  export HH_AUTO_APPLY_ALLOW_LIVE_SEND=0
+fi
 
 if [[ -z "${HH_AUTO_APPLY_PYTHON:-}" ]]; then
   if [[ -x ./.venv/bin/python3 ]]; then
@@ -52,12 +66,17 @@ cmd=(
   "$HH_AUTO_APPLY_PYTHON" -m app.cli auto-apply
   "${query_args[@]}"
   --per-query "${HH_AUTO_APPLY_PER_QUERY:-20}"
+  --pages "${HH_AUTO_APPLY_PAGES:-1}"
   --draft-threshold "${HH_AUTO_APPLY_DRAFT_THRESHOLD:-80}"
   --min-score "${HH_AUTO_APPLY_MIN_SCORE:-80}"
   --limit "${HH_AUTO_APPLY_LIMIT:-5}"
   --daily-limit "${HH_AUTO_APPLY_DAILY_LIMIT:-5}"
   --company-guard "${HH_AUTO_APPLY_COMPANY_GUARD:-strict}"
 )
+
+if [[ -n "${HH_AUTO_APPLY_RESUME_ID:-}" ]]; then
+  cmd+=(--resume-id "$HH_AUTO_APPLY_RESUME_ID")
+fi
 
 if [[ "${HH_AUTO_APPLY_HEADLESS:-0}" == "1" ]]; then
   cmd+=(--headless)
@@ -69,6 +88,9 @@ fi
 
 caller_args=()
 blocked_live_send=0
+if [[ "${HH_AUTO_APPLY_LIVE_SEND_DISABLED:-0}" == "1" ]]; then
+  blocked_live_send=1
+fi
 for arg in "$@"; do
   case "$arg" in
     --send|--send=*)

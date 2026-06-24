@@ -18,6 +18,16 @@ data/hh_telegram_*
 data/hh-browser-profile/
 data/google-manual-chrome-profile/
 data/*screenshot*.pdf
+
+# HH local runtime/audit artifacts; keep out of repo handoffs/commits.
+data/hh_*_disabled.flag
+data/hh_*_disabled.flag.*
+data/hh_*_enabled.audit
+data/hh_*_audit_*.md
+data/hh_*_audit_*.json
+data/hh_corrective_reply_drafts_*.md
+data/hh_chat_manual_approved*.json
+tmp/
 __pycache__/
 .pytest_cache/
 .ruff_cache/

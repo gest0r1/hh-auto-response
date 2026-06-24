@@ -350,15 +350,109 @@ class CRMRepository:
             conn.commit()
             return int(cur.lastrowid)
 
-    def count_sent_today(self) -> int:
+    def record_external_interaction(
+        self,
+        *,
+        application_id: int,
+        kind: str,
+        target_url: str = "",
+        status: str = "draft",
+        payload: dict[str, Any] | None = None,
+        notes: str | None = None,
+    ) -> int:
+        """Record an external form/chat/etc. action anchored to a CRM application.
+
+        External actions must be grounded in the exact application row so the
+        resume choice is not inferred later from form wording, grade, salary, or
+        memory. The current application.resume_id is copied into the event as a
+        snapshot for auditability.
+        """
+        with connect(self.db_path) as conn:
+            application = conn.execute(
+                """
+                SELECT id, vacancy_id, resume_id
+                FROM applications
+                WHERE id = ?
+                """,
+                (application_id,),
+            ).fetchone()
+            if application is None:
+                raise ValueError(f"Cannot record external interaction for missing application_id={application_id}")
+            cur = conn.execute(
+                """
+                INSERT INTO external_interactions (
+                    vacancy_id, application_id, kind, target_url, status,
+                    resume_id, payload_json, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    application["vacancy_id"],
+                    application_id,
+                    kind,
+                    target_url,
+                    status,
+                    application["resume_id"],
+                    _json(payload or {}),
+                    notes,
+                ),
+            )
+            conn.commit()
+            return int(cur.lastrowid)
+
+    def list_external_interactions(
+        self,
+        *,
+        application_id: int | None = None,
+        vacancy_id: int | None = None,
+        target_url: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        where: list[str] = []
+        params: list[Any] = []
+        if application_id is not None:
+            where.append("e.application_id = ?")
+            params.append(application_id)
+        if vacancy_id is not None:
+            where.append("e.vacancy_id = ?")
+            params.append(vacancy_id)
+        if target_url is not None:
+            where.append("e.target_url = ?")
+            params.append(target_url)
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+        params.append(limit)
+        with connect(self.db_path) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT e.*, v.title AS vacancy_title, v.company AS company
+                FROM external_interactions e
+                LEFT JOIN vacancies v ON v.id = e.vacancy_id
+                {where_sql}
+                ORDER BY e.created_at DESC, e.id DESC
+                LIMIT ?
+                """,
+                tuple(params),
+            ).fetchall()
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            item = _row_dict(row)
+            item["payload"] = _loads(item.pop("payload_json", "{}"), {})
+            result.append(item)
+        return result
+
+    def count_sent_today(self, *, resume_id: str | None = None) -> int:
+        where = "status = 'sent' AND date(COALESCE(sent_at, updated_at)) = date('now')"
+        params: list[Any] = []
+        if resume_id:
+            where += " AND resume_id = ?"
+            params.append(resume_id)
         with connect(self.db_path) as conn:
             row = conn.execute(
-                """
+                f"""
                 SELECT COUNT(*) AS c
                 FROM applications
-                WHERE status = 'sent'
-                  AND date(COALESCE(sent_at, updated_at)) = date('now')
-                """
+                WHERE {where}
+                """,
+                tuple(params),
             ).fetchone()
         return int(row["c"])
 
@@ -426,6 +520,7 @@ class CRMRepository:
         include_demo: bool = False,
         decisions: tuple[str, ...] = ("hot", "review"),
         company_guard: str = "strict",
+        resume_id: str | None = None,
     ) -> list[dict[str, Any]]:
         where = "a.status = 'draft' AND v.score >= ?"
         params: list[Any] = [min_score]
@@ -435,6 +530,9 @@ class CRMRepository:
             params.extend(decisions)
         if not include_demo:
             where += " AND v.external_id NOT LIKE 'demo-%'"
+        if resume_id:
+            where += " AND a.resume_id = ?"
+            params.append(resume_id)
 
         if limit <= 0:
             return []
@@ -443,7 +541,7 @@ class CRMRepository:
             rows = conn.execute(
                 f"""
                 SELECT v.*, a.id AS application_id, a.status AS application_status,
-                       a.cover_letter, a.score_at_apply, a.draft_version
+                       a.cover_letter, a.resume_id, a.score_at_apply, a.draft_version
                 FROM vacancies v
                 JOIN applications a ON a.vacancy_id = v.id
                 WHERE {where}
@@ -493,7 +591,7 @@ class CRMRepository:
             row = conn.execute(
                 """
                 SELECT v.*, a.id AS application_id, a.status AS application_status,
-                       a.cover_letter, a.score_at_apply, a.draft_version
+                       a.cover_letter, a.resume_id, a.score_at_apply, a.draft_version
                 FROM applications a
                 JOIN vacancies v ON v.id = a.vacancy_id
                 WHERE a.id = ?

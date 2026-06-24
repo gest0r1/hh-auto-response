@@ -249,6 +249,73 @@ def test_hard_title_mismatch_terms_prevent_auto_hot_scores():
     assert any("php" in penalty or "symfony" in penalty for penalty in php_result.penalties)
 
 
+def test_noise_titles_from_high_volume_search_stay_out_of_auto_send_queue():
+    profile = CandidateProfile(
+        target_roles=["Python Backend Engineer", "AI Backend Engineer", "LLM Platform Engineer"],
+        skills=["Python", "FastAPI", "PostgreSQL", "Docker", "LLM", "RAG", "AI"],
+        preferred_keywords=["remote", "удаленно", "Python", "LLM", "backend", "platform"],
+        stop_keywords=[],
+        min_monthly_salary=100000,
+    )
+    cases = [
+        ("Senior Penetration Tester", "penetration tester"),
+        ("Junior JavaScript Developer", "javascript"),
+        ("Power Platform Developer", "power platform"),
+        ("Infrastructure & Network Engineer (Linux / DevOps)", "infrastructure"),
+        ("DevOps Linux / Kubernetes инженер", "kubernetes"),
+        ("Senior Test Automation Engineer (Python / Playwright)", "test automation"),
+        ("AL/ML/Prompt engineer (Python, GPT, LLaMA, Claude)", "prompt engineer"),
+        ("Senior Fullstack Backend Engineer (Node.js / React, Real-Time Platform)", "node/react"),
+        ("Senior Fullstack Engineer (Platform, Chrome Extensions)", "chrome extensions"),
+        ("Middle Full Stack Developer", "generic fullstack"),
+        ("Старший разработчик DWH MS SQL Server (Senior DWH Developer)", "dwh"),
+    ]
+
+    for title, expected_penalty in cases:
+        vacancy = Vacancy(
+            external_id=f"hh-noise-{expected_penalty.replace(' ', '-')}",
+            title=title,
+            company="NoiseCo",
+            description=(
+                "Удаленно. Python, FastAPI, PostgreSQL, Docker, LLM, RAG, AI backend platform. "
+                "High-salary keyword-stuffed vacancy."
+            ),
+            url="https://hh.ru/vacancy/noise",
+            salary_from=250000,
+            salary_to=320000,
+            currency="RUR",
+            schedule="remote",
+            employment="full",
+            skills=["Python", "FastAPI", "PostgreSQL", "Docker", "LLM"],
+        )
+
+        result = score_vacancy(vacancy, profile)
+
+        assert result.score < 70, title
+        assert result.decision in {"maybe", "archive"}
+        assert any(
+            "стоп в названии" in penalty and expected_penalty in penalty
+            for penalty in result.penalties
+        ), result.penalties
+
+    relevant_fullstack_ai = Vacancy(
+        external_id="hh-fullstack-ai-python",
+        title="Fullstack AI Developer (Python + React)",
+        company="AI Product",
+        description="Удаленно. Python, FastAPI, React, LLM, AI agents, PostgreSQL, Docker.",
+        url="https://hh.ru/vacancy/fullstack-ai-python",
+        salary_from=250000,
+        salary_to=320000,
+        currency="RUR",
+        schedule="remote",
+        employment="full",
+        skills=["Python", "FastAPI", "React", "LLM", "Docker"],
+    )
+    relevant_result = score_vacancy(relevant_fullstack_ai, profile)
+    assert relevant_result.score >= 85
+    assert not any("generic fullstack" in penalty or "node/react" in penalty for penalty in relevant_result.penalties)
+
+
 def test_go_developer_title_stop_caps_keyword_stuffed_role_without_blocking_django():
     profile = CandidateProfile(
         target_roles=["Python Backend Engineer", "AI Backend Engineer", "LLM Platform Engineer"],

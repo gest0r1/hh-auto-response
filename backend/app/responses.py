@@ -656,10 +656,13 @@ def _case_relevance(case: CaseStudy, vacancy: Vacancy) -> int:
         score -= 70
     if _is_backend_product_vacancy(vacancy):
         backend_product_boosts = {
-            "viably": 34,
+            "whynotai telegram agents": 42,
+            "transoff ai sales qa": 40,
+            "crypto arbitrage platform": 38,
+            "auto trading bot": 36,
+            "mexc trade synchronizer": 34,
             "headhunter crm agent": 32,
-            "whynotai telegram agents": 30,
-            "transoff ai sales qa": 26,
+            "viably": 24,
             "ai dev office": 24,
             "ai-office x-one": 22,
             "vibegent": 18,
@@ -672,6 +675,9 @@ def _case_relevance(case: CaseStudy, vacancy: Vacancy) -> int:
                 break
         if any(marker in case_text for marker in ["fastapi", "django", "postgresql", "redis", "api", "интеграц", "worker", "воркер"]):
             score += 8
+        if any(marker in vacancy_text for marker in ["telegram", "телеграм", "бот", "bots", "кампани"]):
+            if any(marker in case_text for marker in ["whynotai telegram agents", "telethon", "telegram-аккаунт", "telegram agents"]):
+                score += 12
         if any(marker in vacancy_text for marker in ["saas", "mvp", "самостоятельн", "релиз", "release"]):
             if any(marker in case_text for marker in ["product platform", "production", "pipeline", "deployment", "деплой", "релиз"]):
                 score += 6

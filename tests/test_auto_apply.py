@@ -6,11 +6,14 @@ from app.scoring import CandidateProfile, ScoreResult, Vacancy
 
 
 class FakeHHClient:
+    def __init__(self, *, external_id: str = "hh-auto-1") -> None:
+        self.external_id = external_id
+
     def search_vacancies(self, *, text: str, per_page: int = 20, page: int = 0):
         assert text
         return [
             Vacancy(
-                external_id="hh-auto-1",
+                external_id=self.external_id,
                 title="Python React AI automation developer",
                 company="AgentCo",
                 description="Удалённо. Python, React, FastAPI, Telegram, CRM, AI automation.",
@@ -131,6 +134,48 @@ def test_auto_apply_dry_run_prepares_without_marking_sent(tmp_path):
     assert repo.dashboard_summary()["metrics"]["sent_total"] == 0
 
 
+def test_auto_apply_dry_run_scopes_queue_to_requested_resume_id(tmp_path):
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    old_runner = FakeApplyRunner(status="prepared")
+    old_result = run_auto_apply_once(
+        repo=repo,
+        search_client=FakeHHClient(),
+        candidate_profile=candidate_profile(),
+        applicant_profile=applicant_profile(),
+        apply_runner=old_runner,
+        settings=AutoApplySettings(
+            queries=["Python React AI automation"],
+            min_score=80,
+            limit=5,
+            send=False,
+            resume_id="old-resume-id",
+        ),
+    )
+    assert old_result["queued"] == 1
+    assert old_runner.calls[0]["drafts"][0].resume_id == "old-resume-id"
+
+    middle_runner = FakeApplyRunner(status="prepared")
+    middle_result = run_auto_apply_once(
+        repo=repo,
+        search_client=EmptyHHClient(),
+        candidate_profile=candidate_profile(),
+        applicant_profile=applicant_profile(),
+        apply_runner=middle_runner,
+        settings=AutoApplySettings(
+            queries=["Middle Python Backend"],
+            min_score=80,
+            limit=5,
+            send=False,
+            resume_id="middle-resume-id",
+        ),
+    )
+
+    assert middle_result["resume_id"] == "middle-resume-id"
+    assert middle_result["queue_candidates"] == 0
+    assert middle_result["queued"] == 0
+    assert middle_runner.calls == []
+
+
 def test_auto_apply_respects_daily_limit_before_opening_browser(tmp_path):
     repo = CRMRepository(tmp_path / "crm.sqlite3")
     sent_runner = FakeApplyRunner(status="sent")
@@ -157,6 +202,58 @@ def test_auto_apply_respects_daily_limit_before_opening_browser(tmp_path):
     assert second["daily_limit_reached"] is True
     assert second["queued"] == 0
     assert blocked_runner.calls == []
+
+
+def test_auto_apply_daily_limit_is_scoped_per_resume_id(tmp_path):
+    repo = CRMRepository(tmp_path / "crm.sqlite3")
+    old_vacancy_id = repo.upsert_vacancy(
+        Vacancy(
+            external_id="hh-old-already-sent",
+            title="Old Python Backend developer",
+            company="OldCo",
+            description="Python backend, FastAPI, удалённо.",
+            url="https://hh.ru/vacancy/old-already-sent",
+            salary_from=220000,
+            salary_to=260000,
+            currency="RUR",
+            schedule="remote",
+            employment="full",
+            skills=["Python", "FastAPI"],
+            raw={"apply_url": "https://hh.ru/applicant/vacancy_response?vacancyId=old-already-sent"},
+        ),
+        ScoreResult(score=90, decision="hot"),
+    )
+    old_app_id = repo.create_or_update_application(
+        old_vacancy_id,
+        cover_letter="Здравствуйте! Релевантный Python backend опыт.",
+        status="draft",
+        resume_id="old-resume-id",
+        score_at_apply=90,
+    )
+    repo.record_feedback(vacancy_id=old_vacancy_id, application_id=old_app_id, event_type="sent")
+    assert repo.count_sent_today(resume_id="old-resume-id") == 1
+
+    middle_runner = FakeApplyRunner(status="sent")
+    middle_result = run_auto_apply_once(
+        repo=repo,
+        search_client=FakeHHClient(external_id="hh-auto-middle-resume"),
+        candidate_profile=candidate_profile(),
+        applicant_profile=applicant_profile(),
+        apply_runner=middle_runner,
+        settings=AutoApplySettings(
+            queries=["Python React AI automation"],
+            min_score=80,
+            daily_limit=1,
+            send=True,
+            resume_id="middle-resume-id",
+        ),
+    )
+
+    assert middle_result["sent"] == 1
+    assert middle_result["daily_remaining"] == 0
+    assert repo.count_sent_today() == 2
+    assert repo.count_sent_today(resume_id="old-resume-id") == 1
+    assert repo.count_sent_today(resume_id="middle-resume-id") == 1
 
 
 def test_auto_apply_archives_stale_bad_draft_before_browser_send(tmp_path):

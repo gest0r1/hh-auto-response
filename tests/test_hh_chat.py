@@ -456,6 +456,53 @@ def test_generate_hh_chat_reply_answers_autotest_ci_metrics_question_directly():
     assert "готов обсудить" not in draft.message
 
 
+def test_generate_hh_chat_reply_answers_network_logs_diagnostics_question_directly():
+    draft = generate_hh_chat_reply(
+        "Спасибо за информацию. Чтобы точнее оценить ваши компетенции, могли бы вы уточнить, "
+        "работали ли вы с инструментами для анализа сетевого трафика (например, снифферами) "
+        "и просмотра логов при диагностике проблем? Если да, приведите пример ситуации, "
+        "когда эти навыки помогли выявить и устранить дефекты в системе.",
+        _profile(),
+        context="Вакансия: QA Automation Engineer",
+    )
+
+    assert "DevTools Network" in draft.message
+    assert "логи" in draft.message.lower()
+    assert "request/response" in draft.message
+    assert "Wireshark/sniffer" in draft.message
+    assert "generic" not in draft.reasons
+    assert "готов обсудить" not in draft.message
+    assert draft.reasons == ["network_logs_diagnostics", "qa_honesty"]
+
+
+def test_generate_hh_chat_reply_answers_no_more_questions_without_generic_context():
+    draft = generate_hh_chat_reply(
+        "Если у вас остались вопросы по условиям или процессу, дайте знать. Есть ли у вас еще вопросы?",
+        _profile(),
+        context="Вакансия: QA Automation Engineer",
+    )
+
+    assert draft.message == "Спасибо, пока вопросов нет. Буду ждать информацию по дальнейшим шагам."
+    assert draft.reasons == ["no_more_questions"]
+    assert "generic" not in draft.reasons
+
+
+def test_generate_hh_chat_reply_answers_office_fulltime_question_honestly():
+    draft = generate_hh_chat_reply(
+        "Хорошо. Понимаю, что ваш опыт сосредоточен на Python/FastAPI и интеграциях. "
+        "Готовы ли вы рассмотреть работу в офисе с полной занятостью?",
+        _profile(),
+        context="Вакансия: QA Automation Engineer",
+    )
+
+    assert "постоянный офис full-time" in draft.message
+    assert "из Обнинска" in draft.message
+    assert "удаленный" in draft.message
+    assert "stack_experience" not in draft.reasons
+    assert "generic" not in draft.reasons
+    assert draft.reasons == ["office_fulltime_honesty", "format"]
+
+
 def test_generate_hh_chat_reply_blocks_unknown_concrete_screening_instead_of_generic_context():
     draft = generate_hh_chat_reply(
         "Расскажите, пожалуйста, приведите пример нестандартной задачи в ваших проектах.",
@@ -466,6 +513,22 @@ def test_generate_hh_chat_reply_blocks_unknown_concrete_screening_instead_of_gen
     assert "manual_required" in draft.reasons
     assert "generic" not in draft.reasons
     assert "готов обсудить" not in draft.message
+
+
+def test_generate_hh_chat_reply_answers_flask_screening_honestly():
+    draft = generate_hh_chat_reply(
+        "Расскажите, пожалуйста, есть ли у вас опыт разработки на Flask? "
+        "Кратко опишите, с чем приходилось работать.",
+        _profile(),
+        context="Вакансия: Python разработчик (офис)",
+    )
+
+    assert "Flask как основной production-стек не заявляю" in draft.message
+    assert "FastAPI/Django" in draft.message
+    assert "SQLAlchemy/Alembic" in draft.message
+    assert "generic" not in draft.reasons
+    assert "manual_required" not in draft.reasons
+    assert draft.reasons == ["flask_honesty", "python_backend_experience"]
 
 
 def test_generate_hh_chat_reply_handles_db_fintech_and_load_questions():
@@ -793,7 +856,7 @@ def test_hh_chat_runner_drafts_without_sending(tmp_path):
     assert result.replies[0]["reply"].startswith("Здравствуйте!")
 
 
-def test_hh_chat_runner_uses_whole_chat_context_for_generic_followup(tmp_path):
+def test_hh_chat_runner_does_not_use_context_focus_for_availability_followup(tmp_path):
     page = FakePage()
     page.preview_rows = [
         {
@@ -817,8 +880,105 @@ def test_hh_chat_runner_uses_whole_chat_context_for_generic_followup(tmp_path):
 
     assert result.drafted == 1
     assert result.replies[0]["question"] == "Актуально ли обсудить вакансию?"
-    assert "AI-агентах" in result.replies[0]["reply"]
-    assert "context_focus" in result.replies[0]["message"]
+    assert result.replies[0]["reply"] == "Здравствуйте! Да, актуально, готов обсудить."
+    assert result.replies[0]["message"] == "actuality"
+
+
+def test_hh_chat_runner_blocks_detailed_broad_stack_draft(tmp_path):
+    page = FakePage()
+    question = (
+        "Расскажите, пожалуйста, подробнее о вашем MLOps/LLMOps пайплайне: "
+        "какие инструменты и процессы вы используете для деплоя моделей и мониторинга их работы?"
+    )
+    page.preview_rows = [
+        {
+            "href": "https://hh.ru/chat/mlops",
+            "dataQa": "chatik-open-chat-mlops",
+            "text": f"LLM Architect\n{question}",
+        }
+    ]
+    page.chat_body = f"Работодатель\n{question}"
+    page.chat_messages = [{"text": question, "isMine": False}]
+    state = HHChatReplyState(tmp_path / "state.json")
+    runner = HHChatRunner(page=page, profile=_profile(), state=state)
+
+    result = runner.run(send=True, limit=1)
+
+    assert result.blocked == 1
+    assert result.sent == 0
+    assert result.statuses == ["blocked_unsafe_auto_reply"]
+    assert "unsafe_auto_reply" in result.replies[0]["message"]
+    assert not any(call[0] == "fill" for call in page.calls)
+
+
+def test_hh_chat_runner_drops_greeting_on_sqlalchemy_followup_after_prior_answer(tmp_path):
+    page = FakePage()
+    question = "Понял, спасибо за подробности. Следующий вопрос: использовали ли вы SQLAlchemy в проектах? Где и сколько времени?"
+    page.preview_rows = [
+        {
+            "href": "https://hh.ru/chat/stratosphere",
+            "dataQa": "chatik-open-chat-stratosphere",
+            "text": f"Python разработчик (офис)\n{question}",
+        }
+    ]
+    page.chat_body = "\n".join(
+        [
+            "Работодатель\nРасскажите, пожалуйста, есть ли у вас опыт разработки на Flask?",
+            "Я\nЗдравствуйте! Flask как основной production-стек не заявляю: основной коммерческий backend-опыт у меня на FastAPI/Django.",
+            f"Работодатель\n{question}",
+        ]
+    )
+    page.chat_messages = [
+        {"text": "Расскажите, пожалуйста, есть ли у вас опыт разработки на Flask?", "isMine": False},
+        {"text": "Здравствуйте! Flask как основной production-стек не заявляю: основной коммерческий backend-опыт у меня на FastAPI/Django.", "isMine": True},
+        {"text": question, "isMine": False},
+    ]
+    state = HHChatReplyState(tmp_path / "state.json")
+    runner = HHChatRunner(page=page, profile=_profile(), state=state)
+
+    result = runner.run(send=False, limit=1)
+
+    assert result.drafted == 1
+    reply = result.replies[0]["reply"]
+    assert not reply.startswith("Здравствуйте")
+    assert "SQLAlchemy" in reply
+    assert "Alembic" in reply
+    assert "1-2 года" in reply
+
+
+def test_hh_chat_runner_drops_greeting_on_office_first_year_followup(tmp_path):
+    page = FakePage()
+    question = "Расскажите, готовы ли вы работать из офиса в течение первого года?"
+    page.preview_rows = [
+        {
+            "href": "https://hh.ru/chat/stratosphere-office",
+            "dataQa": "chatik-open-chat-stratosphere-office",
+            "text": f"Python разработчик (офис)\n{question}",
+        }
+    ]
+    page.chat_body = "\n".join(
+        [
+            "Работодатель\nПонял, спасибо за подробности. Следующий вопрос: использовали ли вы SQLAlchemy в проектах? Где и сколько времени?",
+            "Я\nЗдравствуйте! Да, SQLAlchemy использовал в backend-проектах как ORM/SQL-слой вместе с Alembic для миграций.",
+            f"Работодатель\n{question}",
+        ]
+    )
+    page.chat_messages = [
+        {"text": "Понял, спасибо за подробности. Следующий вопрос: использовали ли вы SQLAlchemy в проектах? Где и сколько времени?", "isMine": False},
+        {"text": "Здравствуйте! Да, SQLAlchemy использовал в backend-проектах как ORM/SQL-слой вместе с Alembic для миграций.", "isMine": True},
+        {"text": question, "isMine": False},
+    ]
+    state = HHChatReplyState(tmp_path / "state.json")
+    runner = HHChatRunner(page=page, profile=_profile(), state=state)
+
+    result = runner.run(send=False, limit=1)
+
+    assert result.drafted == 1
+    reply = result.replies[0]["reply"]
+    assert not reply.startswith("Здравствуйте")
+    assert "готов рассмотреть" in reply
+    assert "Обнинск" in reply or "Обнинске" in reply
+    assert "детали" in reply
 
 
 def test_hh_chat_runner_deep_scans_interview_preview_and_uses_inside_question(tmp_path):

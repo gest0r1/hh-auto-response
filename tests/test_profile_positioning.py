@@ -65,6 +65,57 @@ def test_hh_auto_apply_daily_runner_is_dry_run_by_default_and_double_gated():
     assert "live send blocked" in runner
 
 
+def test_hh_auto_apply_middle_runner_uses_middle_resume_and_stays_dry_run():
+    middle = (ROOT / "scripts/run_hh_auto_apply_middle_daily.sh").read_text(encoding="utf-8")
+
+    assert 'HH_AUTO_APPLY_RESUME_ID="${HH_AUTO_APPLY_RESUME_ID:-45dcf0f8ff10ab20210039ed1f70384c77345a}"' in middle
+    assert 'HH_AUTO_APPLY_SEND="0"' in middle
+    assert 'HH_AUTO_APPLY_ALLOW_LIVE_SEND="0"' in middle
+    assert "Middle Python Backend developer" in middle
+    assert "FastAPI developer" in middle
+    assert "Django backend developer" in middle
+    assert "exec ./scripts/run_hh_auto_apply.sh" in middle
+
+
+def test_hh_auto_apply_live_runners_are_50_per_resume_lane():
+    main = (ROOT / "scripts/run_hh_auto_apply_live_approved.sh").read_text(encoding="utf-8")
+    middle = (ROOT / "scripts/run_hh_auto_apply_middle_live_approved.sh").read_text(encoding="utf-8")
+
+    assert 'HH_AUTO_APPLY_RESUME_ID="${HH_AUTO_APPLY_RESUME_ID:-b2b0d680ff1065a62b0039ed1f4f426b6d6b73}"' in main
+    assert 'HH_AUTO_APPLY_LIMIT="${HH_AUTO_APPLY_LIMIT:-50}"' in main
+    assert 'HH_AUTO_APPLY_DAILY_LIMIT="${HH_AUTO_APPLY_DAILY_LIMIT:-50}"' in main
+    assert 'HH_AUTO_APPLY_PAGES="${HH_AUTO_APPLY_PAGES:-5}"' in main
+    assert 'HH_AUTO_APPLY_REQUIRE_DETAILS="${HH_AUTO_APPLY_REQUIRE_DETAILS:-0}"' in main
+
+    assert 'HH_AUTO_APPLY_RESUME_ID="${HH_AUTO_APPLY_RESUME_ID:-45dcf0f8ff10ab20210039ed1f70384c77345a}"' in middle
+    assert 'HH_PROFILE_PATH="${HH_PROFILE_PATH:-./data/profile.aleksandr.middle_python_backend.json}"' in middle
+    assert 'HH_AUTO_APPLY_LIMIT="${HH_AUTO_APPLY_LIMIT:-50}"' in middle
+    assert 'HH_AUTO_APPLY_DAILY_LIMIT="${HH_AUTO_APPLY_DAILY_LIMIT:-50}"' in middle
+    assert 'HH_AUTO_APPLY_PAGES="${HH_AUTO_APPLY_PAGES:-5}"' in middle
+    assert 'HH_AUTO_APPLY_REQUIRE_DETAILS="${HH_AUTO_APPLY_REQUIRE_DETAILS:-0}"' in middle
+    assert "exec ./scripts/run_hh_auto_apply.sh" in middle
+
+
+def test_middle_python_backend_profile_is_full_main_copy_with_middle_positioning():
+    main = json.loads((ROOT / "data/profile.aleksandr.json").read_text(encoding="utf-8"))
+    profile = json.loads((ROOT / "data/profile.aleksandr.middle_python_backend.json").read_text(encoding="utf-8"))
+    titles = [case.get("title", "") for case in profile["cases"]]
+    crypto = next(case for case in profile["cases"] if case.get("title") == "Crypto Arbitrage Platform")
+
+    assert profile["headline"].startswith("Middle Python Backend Developer")
+    assert profile["salary_positioning"]["active_hh_resume_salary_rub"] == 200000
+    assert profile["cases_count"] == main["cases_count"] == len(profile["cases"])
+    assert profile["skills"] == main["skills"]
+    assert titles == [case.get("title", "") for case in main["cases"]]
+    assert "не урезанная версия" in profile["positioning"]
+    assert "lean/short middle-only" in profile["salary_strategy"]
+    assert "whynotai Telegram Agents - платформа Telegram AI-агентов" in titles
+    assert "Transoff AI Sales QA Platform - контроль качества звонков" in titles
+    assert "HeadHunter CRM Agent - агент для поиска работы и откликов" in titles
+    crypto_text = json.dumps(crypto, ensure_ascii=False)
+    assert "30+ CEX" in crypto_text
+
+
 def test_hh_chat_hourly_runner_is_dry_run_by_default_and_double_gated():
     hourly = (ROOT / "scripts/run_hh_chat_replies_hourly.sh").read_text(encoding="utf-8")
     runner = (ROOT / "scripts/run_hh_chat_replies.sh").read_text(encoding="utf-8")
@@ -102,6 +153,7 @@ def test_aleksandr_profile_closes_open_project_periods_in_may_2026():
 def test_aleksandr_profile_contains_new_employer_facing_cases():
     profile = json.loads((ROOT / "data/profile.aleksandr.json").read_text(encoding="utf-8"))
     titles = [case.get("title", "") for case in profile["cases"]]
+    crypto = next(case for case in profile["cases"] if case.get("title") == "Crypto Arbitrage Platform")
 
     assert profile["cases_count"] == len(profile["cases"])
     assert "AI Dev Office - центр управления AI-агентами" in titles
@@ -109,6 +161,9 @@ def test_aleksandr_profile_contains_new_employer_facing_cases():
     assert "AI-office X-ONE - платформа управления AI-офисом" in titles
     assert "Transoff AI Sales QA Platform - контроль качества звонков" in titles
     assert "HeadHunter CRM Agent - агент для поиска работы и откликов" in titles
+    assert "Crypto Arbitrage Platform" in titles
+    assert "30+ CEX" in crypto["description"]
+    assert any("30+ CEX" in achievement for achievement in crypto["achievements"])
     assert "Telethon" in profile["skills"]
     assert "Celery" in profile["skills"]
     assert "Qdrant" in profile["skills"]

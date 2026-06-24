@@ -43,6 +43,8 @@ def test_cli_has_browser_apply_queue_command():
             "3",
             "--user-data-dir",
             "./data/hh-browser-profile",
+            "--resume-id",
+            "middle-resume-id",
             "--include-demo",
             "--keep-open",
             "--send",
@@ -52,6 +54,7 @@ def test_cli_has_browser_apply_queue_command():
     assert args.min_score == 80
     assert args.limit == 3
     assert args.user_data_dir == "./data/hh-browser-profile"
+    assert args.resume_id == "middle-resume-id"
     assert args.include_demo is True
     assert args.keep_open is True
     assert args.send is True
@@ -72,6 +75,8 @@ def test_cli_has_auto_apply_command():
             "4",
             "--daily-limit",
             "2",
+            "--resume-id",
+            "middle-resume-id",
             "--send",
             "--headless",
         ]
@@ -82,6 +87,7 @@ def test_cli_has_auto_apply_command():
     assert args.min_score == 85
     assert args.limit == 4
     assert args.daily_limit == 2
+    assert args.resume_id == "middle-resume-id"
     assert args.send is True
     assert args.headless is True
     assert callable(args.func)

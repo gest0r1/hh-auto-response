@@ -9,6 +9,7 @@ cd "$(dirname "$0")/.."
 # with an explicit one-off operator decision, not this scheduled wrapper.
 export HH_AUTO_APPLY_SEND="0"
 export HH_AUTO_APPLY_ALLOW_LIVE_SEND="0"
+export HH_AUTO_APPLY_RESUME_ID="${HH_AUTO_APPLY_RESUME_ID:-b2b0d680ff1065a62b0039ed1f4f426b6d6b73}"
 export HH_AUTO_APPLY_HEADLESS="${HH_AUTO_APPLY_HEADLESS:-1}"
 export HH_AUTO_APPLY_FETCH_DETAILS="${HH_AUTO_APPLY_FETCH_DETAILS:-1}"
 export HH_AUTO_APPLY_REQUIRE_DETAILS="${HH_AUTO_APPLY_REQUIRE_DETAILS:-1}"

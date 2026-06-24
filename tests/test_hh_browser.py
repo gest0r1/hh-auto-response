@@ -55,6 +55,7 @@ def test_row_to_apply_draft_uses_apply_url_and_cover_letter():
         {
             "id": 777,
             "application_id": 12,
+            "resume_id": "middle-resume-id",
             "title": "Python React automation engineer",
             "company": "AgentCo",
             "apply_url": "https://hh.ru/applicant/vacancy_response?vacancyId=777",
@@ -64,6 +65,7 @@ def test_row_to_apply_draft_uses_apply_url_and_cover_letter():
 
     assert draft.vacancy_id == 777
     assert draft.application_id == 12
+    assert draft.resume_id == "middle-resume-id"
     assert draft.apply_url.endswith("vacancyId=777")
     assert "CRM" in draft.cover_letter
 
@@ -87,6 +89,78 @@ def test_browser_runner_fills_cover_letter_without_sending():
     assert result.status == "prepared"
     assert ("goto", draft.apply_url, "domcontentloaded") in page.calls
     assert ("fill", 'textarea[name="letter"]', draft.cover_letter) in page.calls
+    assert not any(call[0] == "click" and "submit" in call[1] for call in page.calls)
+
+
+def test_browser_runner_selects_requested_resume_before_filling_cover_letter():
+    page = FakePage()
+    resume_selector = 'input[name="resume"][value="middle-resume-id"]'
+    page.available_selectors.add(resume_selector)
+    runner = HHWebApplyRunner(page=page)
+    draft = row_to_apply_draft(
+        {
+            "id": 777,
+            "application_id": 12,
+            "resume_id": "middle-resume-id",
+            "title": "Python backend developer",
+            "company": "AgentCo",
+            "apply_url": "https://hh.ru/applicant/vacancy_response?vacancyId=777",
+            "cover_letter": "Здравствуйте! Готов обсудить backend.",
+        }
+    )
+
+    result = runner.prepare_one(draft, send=False)
+
+    assert result.status == "prepared"
+    assert ("click", resume_selector) in page.calls
+    assert page.calls.index(("click", resume_selector)) < page.calls.index(
+        ("fill", 'textarea[name="letter"]', draft.cover_letter)
+    )
+
+
+def test_browser_runner_accepts_resume_query_preselection_when_hh_hides_radio_input():
+    page = FakePage()
+    page.available_selectors.add('[data-qa="resume-title"]')
+    runner = HHWebApplyRunner(page=page)
+    draft = row_to_apply_draft(
+        {
+            "id": 777,
+            "application_id": 12,
+            "resume_id": "middle-resume-id",
+            "title": "Python backend developer",
+            "company": "AgentCo",
+            "apply_url": "https://hh.ru/applicant/vacancy_response?vacancyId=777",
+            "cover_letter": "Здравствуйте! Готов обсудить backend.",
+        }
+    )
+
+    result = runner.prepare_one(draft, send=False)
+
+    assert result.status == "prepared"
+    assert ("goto", "https://hh.ru/applicant/vacancy_response?vacancyId=777&resume=middle-resume-id", "domcontentloaded") in page.calls
+    assert ("fill", 'textarea[name="letter"]', draft.cover_letter) in page.calls
+
+
+def test_browser_runner_blocks_when_requested_resume_is_not_available():
+    page = FakePage()
+    runner = HHWebApplyRunner(page=page)
+    draft = row_to_apply_draft(
+        {
+            "id": 777,
+            "application_id": 12,
+            "resume_id": "missing-resume-id",
+            "title": "Python backend developer",
+            "company": "AgentCo",
+            "apply_url": "https://hh.ru/applicant/vacancy_response?vacancyId=777",
+            "cover_letter": "Здравствуйте! Готов обсудить backend.",
+        }
+    )
+
+    result = runner.prepare_one(draft, send=True)
+
+    assert result.status == "resume_not_found"
+    assert "missing-resume-id" in result.message
+    assert not any(call[0] == "fill" for call in page.calls)
     assert not any(call[0] == "click" and "submit" in call[1] for call in page.calls)
 
 

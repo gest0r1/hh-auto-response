@@ -85,6 +85,7 @@ _HARD_TITLE_STOP_TERMS = (
     "dotnet",
     "qa engineer",
     "qa automation",
+    "test automation engineer",
     "sdet",
     "software development engineer in test",
     "qa автоматизатор",
@@ -97,6 +98,26 @@ _HARD_TITLE_STOP_TERMS = (
     "sales",
     "продаж",
     "маркетолог",
+    "javascript developer",
+    "javascript разработчик",
+    "java script developer",
+    "js developer",
+    "js разработчик",
+    "power platform",
+    "devops engineer",
+    "devops инженер",
+    "infrastructure engineer",
+    "infrastructure & network engineer",
+    "network engineer",
+    "linux engineer",
+    "kubernetes инженер",
+    "penetration tester",
+    "pentester",
+    "dwh developer",
+    "dwh разработчик",
+    "ms sql server",
+    "sql server developer",
+    "sql server разработчик",
     "php",
     "symfony",
     "laravel",
@@ -147,6 +168,8 @@ _HARD_TITLE_STOP_TERMS = (
     "ии оператор",
     "ai operator",
     "оператор ии",
+    "prompt engineer",
+    "chrome extensions",
 )
 
 
@@ -176,6 +199,16 @@ def _title_stop_penalties(title: str) -> list[str]:
     penalties = [term for term in _HARD_TITLE_STOP_TERMS if term in normalized_title]
     penalties.extend(label for pattern, label in _HARD_TITLE_STOP_PATTERNS if pattern.search(normalized_title))
     penalties.extend(label for pattern, label in _GO_TITLE_STOP_PATTERNS if pattern.search(normalized_title))
+    if (
+        re.search(r"\b(?:node\s*\.\s*js|nodejs|node\s+js|react)\b", normalized_title)
+        and not any(marker in normalized_title for marker in ("python", "ai", "llm", "agent"))
+    ):
+        penalties.append("node/react без python/ai в названии")
+    if (
+        re.search(r"\bfull\s*stack\b|\bfullstack\b", normalized_title)
+        and not any(marker in normalized_title for marker in ("python", "ai", "llm", "agent"))
+    ):
+        penalties.append("generic fullstack без python/ai в названии")
     return penalties
 
 

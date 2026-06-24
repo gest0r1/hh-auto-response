@@ -798,6 +798,37 @@ def format_chat_context(
     return "\n".join(lines)
 
 
+def has_prior_outgoing_message(messages: Sequence[dict[str, Any] | HHChatMessage]) -> bool:
+    return any(
+        message.is_mine
+        for raw in messages
+        if (message := chat_message_from_raw(raw))
+    )
+
+
+def strip_initial_chat_greeting(message: str) -> str:
+    text = (message or "").strip()
+    stripped = re.sub(
+        r"(?iu)^\s*(?:здравствуйте|добрый\s+день|доброе\s+утро|добрый\s+вечер|привет)(?:[,!.]+)?\s*",
+        "",
+        text,
+        count=1,
+    ).strip()
+    return stripped or text
+
+
+def maybe_strip_followup_greeting(
+    draft: HHChatReplyDraft,
+    messages: Sequence[dict[str, Any] | HHChatMessage],
+) -> HHChatReplyDraft:
+    if not has_prior_outgoing_message(messages):
+        return draft
+    stripped = strip_initial_chat_greeting(draft.message)
+    if stripped == draft.message:
+        return draft
+    return HHChatReplyDraft(message=stripped, reasons=[*draft.reasons, "followup_no_greeting"])
+
+
 def _contains_any(text: str, markers: list[str]) -> bool:
     lowered = _lower(text)
     return any(marker in lowered for marker in markers)
@@ -895,11 +926,15 @@ def is_concrete_experience_question(text: str) -> bool:
             "был ли у вас опыт",
             "опыт с",
             "работали с",
+            "работали ли вы с",
             "работал с",
             "использовали",
             "использовал",
             "применяли",
             "приходилось",
+            "могли бы вы уточнить",
+            "уточнить, работали ли",
+            "приведите пример",
             "расскажите",
             "опишите",
             "перечислите",
@@ -951,6 +986,23 @@ def is_python_vue_experience_question(text: str) -> bool:
     )
 
 
+def is_flask_experience_question(text: str) -> bool:
+    lowered = _lower(text)
+    if not lowered:
+        return False
+    return "flask" in lowered and is_concrete_experience_question(lowered)
+
+
+def is_sqlalchemy_experience_question(text: str) -> bool:
+    lowered = _lower(text)
+    if not lowered:
+        return False
+    return _contains_any(lowered, ["sqlalchemy", "alembic"]) and (
+        is_concrete_experience_question(lowered)
+        or _contains_any(lowered, ["где", "сколько времени", "использовали ли"])
+    )
+
+
 def is_algorithms_data_structures_question(text: str) -> bool:
     lowered = _lower(text)
     if not lowered:
@@ -978,6 +1030,61 @@ def is_autotest_ci_metrics_question(text: str) -> bool:
     )
     has_metrics = _contains_any(lowered, ["метрик", "качества", "этапы пайплайна"])
     return has_autotest and (has_pipeline or has_metrics)
+
+
+def is_network_logs_diagnostics_question(text: str) -> bool:
+    lowered = _lower(text)
+    if not lowered:
+        return False
+    has_diagnostic_tool = _contains_any(
+        lowered,
+        [
+            "сетевого трафика",
+            "сетевой трафик",
+            "traffic",
+            "sniffer",
+            "сниффер",
+            "снифферами",
+            "wireshark",
+            "devtools",
+            "логи",
+            "логов",
+            "просмотра логов",
+            "диагностик",
+        ],
+    )
+    has_problem_context = _contains_any(
+        lowered,
+        ["дефект", "проблем", "устран", "выяв", "пример", "диагност"],
+    )
+    return has_diagnostic_tool and has_problem_context
+
+
+def is_no_more_questions_prompt(text: str) -> bool:
+    lowered = _lower(text)
+    if not lowered:
+        return False
+    return _contains_any(lowered, ["остались вопросы", "есть ли у вас еще вопросы", "есть ли у вас ещё вопросы"])
+
+
+def is_office_first_year_question(text: str) -> bool:
+    lowered = _lower(text)
+    if not lowered:
+        return False
+    has_office = _contains_any(lowered, ["офис", "офиса", "в офисе", "из офиса", "офисный"])
+    has_first_year = _contains_any(lowered, ["первого года", "первый год", "в течение года", "год из офиса"])
+    asks_readiness = _contains_any(lowered, ["готовы", "готов ли", "рассмотреть", "подходит", "подойд", "работать"])
+    return has_office and has_first_year and asks_readiness
+
+
+def is_office_full_time_question(text: str) -> bool:
+    lowered = _lower(text)
+    if not lowered:
+        return False
+    has_office = _contains_any(lowered, ["офис", "в офисе", "офисный"])
+    has_full_time = _contains_any(lowered, ["полной занятостью", "полная занятость", "full-time", "фуллтайм", "5/2"])
+    asks_readiness = _contains_any(lowered, ["готовы", "готов ли", "рассмотреть", "подходит", "подойд"])
+    return has_office and has_full_time and asks_readiness
 
 
 def is_availability_only_prompt(text: str) -> bool:
@@ -1241,6 +1348,27 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile, *, context:
             reasons=["ansible_honesty"],
         )
 
+    if is_flask_experience_question(lowered):
+        return HHChatReplyDraft(
+            message=humanize_hh_chat_reply(
+                "Здравствуйте! Flask как основной production-стек не заявляю: основной коммерческий backend-опыт у меня на FastAPI/Django. "
+                "При этом задачи близкие: REST/API, роуты, интеграции, SQLAlchemy/Alembic, PostgreSQL/Redis, auth и Docker-деплой. "
+                "С поддержкой или доработкой Flask-сервиса смогу быстро включиться, но глубокий многолетний Flask-опыт отдельно не буду приписывать."
+            ),
+            reasons=["flask_honesty", "python_backend_experience"],
+        )
+
+    if is_sqlalchemy_experience_question(lowered):
+        return HHChatReplyDraft(
+            message=humanize_hh_chat_reply(
+                "Здравствуйте! Да, SQLAlchemy использовал в backend-проектах как ORM/SQL-слой вместе с Alembic для миграций: "
+                "модели, связи, миграции, запросы, интеграции с PostgreSQL/SQLite, auth/API и worker-логикой. "
+                "По времени - примерно 1-2 года в проектных backend-задачах; активнее в связке FastAPI/Django + PostgreSQL. "
+                "Глубокий DBA-профиль не заявляю, но для прикладного backend работаю уверенно."
+            ),
+            reasons=["sqlalchemy_alembic_experience", "python_backend_experience"],
+        )
+
     if _contains_any(lowered, ["node.js", "node js", "node"]) and is_concrete_experience_question(lowered):
         return HHChatReplyDraft(
             message=humanize_hh_chat_reply(
@@ -1283,6 +1411,19 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile, *, context:
                 "падения сборки, время пайплайна, стабильность деплоя и ошибки после релиза."
             ),
             reasons=["autotest_ci_metrics", "qa_honesty"],
+        )
+
+    if is_network_logs_diagnostics_question(lowered):
+        return HHChatReplyDraft(
+            message=humanize_hh_chat_reply(
+                "Здравствуйте! В чистой QA-роли с глубоким сетевым анализом не работал, но в backend/integration-задачах "
+                "регулярно разбирал проблемы через логи и HTTP-трафик: DevTools Network, curl/Postman, docker/app logs, "
+                "статусы/headers/payload API и trace/request id. Пример: при интеграции API или webhook сначала сверял "
+                "фактический request/response, коды ошибок, payload и логи сервиса; так находил проблемы в auth/header, "
+                "формате данных, таймаутах или обработке ошибок и доводил дефект до исправления. Wireshark/sniffer как "
+                "основной инструмент не заявляю, но базовую диагностику трафика и логов в прикладных backend-задачах делал."
+            ),
+            reasons=["network_logs_diagnostics", "qa_honesty"],
         )
 
     if is_django_fastapi_screening_prompt(lowered):
@@ -1353,15 +1494,35 @@ def generate_hh_chat_reply(question: str, profile: ApplicantProfile, *, context:
                 reasons=["commercial_ai_years_honesty"],
             )
 
-    if is_availability_only_prompt(lowered):
-        message = "Здравствуйте! Да, актуально, готов обсудить."
-        reasons = ["actuality"]
-        if context_focus:
-            message = f"{message} {context_focus}"
-            reasons.append("context_focus")
+    if is_no_more_questions_prompt(lowered):
         return HHChatReplyDraft(
-            message=humanize_hh_chat_reply(message),
-            reasons=reasons,
+            message="Спасибо, пока вопросов нет. Буду ждать информацию по дальнейшим шагам.",
+            reasons=["no_more_questions"],
+        )
+
+    if is_office_first_year_question(lowered):
+        return HHChatReplyDraft(
+            message=humanize_hh_chat_reply(
+                "Здравствуйте! Да, готов рассмотреть работу из офиса в течение первого года. "
+                "Сейчас я в Обнинске, поэтому важны детали: график, адрес/район офиса, частота присутствия, "
+                "релокация или компенсация дороги/жилья и условия после первого года. Если формат и условия понятные, готов обсудить."
+            ),
+            reasons=["office_first_year", "format"],
+        )
+
+    if is_office_full_time_question(lowered):
+        return HHChatReplyDraft(
+            message=humanize_hh_chat_reply(
+                "Здравствуйте! Уточню честно: постоянный офис full-time сейчас не мой приоритет, я из Обнинска и в первую очередь рассматриваю удаленный формат. "
+                "Если возможен удаленный или гибридный вариант с понятными условиями, готов обсудить."
+            ),
+            reasons=["office_fulltime_honesty", "format"],
+        )
+
+    if is_availability_only_prompt(lowered):
+        return HHChatReplyDraft(
+            message=humanize_hh_chat_reply("Здравствуйте! Да, актуально, готов обсудить."),
+            reasons=["actuality"],
         )
 
     if _contains_any(lowered, ["актуаль", "интерес", "рассматриваете", "готовы", "готов ли"]):
@@ -2058,12 +2219,63 @@ class HHChatRunner:
 
         external_targets = extract_external_targets(question)
         if external_targets or is_external_interview_link(question):
-            return self._handle_external_handoff(preview, question, external_targets, send=send)
+            return self._handle_external_handoff(
+                preview,
+                question,
+                external_targets,
+                send=send,
+                chat_messages=chat_messages,
+            )
 
         if self.state.was_answered(preview.chat_id, question):
             return HHChatReplyResult(preview.chat_id, preview.title, "skipped_duplicate", question, "", preview.url, "Question was already answered by this runner")
 
         draft = generate_hh_chat_reply(question, self.profile, context=chat_context)
+        draft = maybe_strip_followup_greeting(draft, chat_messages)
+        detailed_screening = is_concrete_experience_question(question) and _contains_any(
+            question,
+            [
+                "расскажите",
+                "опишите",
+                "пример",
+                "как именно",
+                "подробнее",
+                "какие конкретно",
+                "какие инструменты",
+                "какие методы",
+                "как устроен",
+                "пайплайн",
+                "pipeline",
+            ],
+        )
+        broad_reasons = {
+            "actuality",
+            "context_focus",
+            "generic",
+            "portfolio",
+            "stack_experience",
+            "format",
+            "salary",
+            "databases",
+        }
+        broad_only = bool(draft.reasons) and all(reason in broad_reasons for reason in draft.reasons)
+        unsafe_auto_reason = (
+            "generic" in draft.reasons
+            or "context_focus" in draft.reasons
+            or (detailed_screening and broad_only)
+            or draft.message.startswith("Здравствуйте! Да, готов обсудить. По контексту")
+            or draft.message.startswith("Здравствуйте! Да, готов обсудить. По профилю")
+        )
+        if unsafe_auto_reason:
+            return HHChatReplyResult(
+                preview.chat_id,
+                preview.title,
+                "blocked_unsafe_auto_reply",
+                question,
+                draft.message,
+                preview.url,
+                ",".join([*draft.reasons, "unsafe_auto_reply"]),
+            )
         if "manual_required" in draft.reasons:
             return HHChatReplyResult(
                 preview.chat_id,
@@ -2115,8 +2327,16 @@ class HHChatRunner:
         status = "sent" if verified else "sent_unverified"
         return status, f"Clicked {clicked_selector}; filled {filled_selector}"
 
-    def _maybe_send_external_ack(self, preview: HHChatPreview, question: str) -> tuple[str | None, str, str | None]:
+    def _maybe_send_external_ack(
+        self,
+        preview: HHChatPreview,
+        question: str,
+        *,
+        chat_messages: Sequence[dict[str, Any] | HHChatMessage] | None = None,
+    ) -> tuple[str | None, str, str | None]:
         message = external_handoff_ack_message(question, self.profile)
+        if chat_messages and has_prior_outgoing_message(chat_messages):
+            message = strip_initial_chat_greeting(message)
         if not external_handoff_ack_enabled() or self.state.was_answered(preview.chat_id, question):
             return None, message, None
         status, detail = self._send_plain_chat_reply(message)
@@ -2136,6 +2356,7 @@ class HHChatRunner:
         external_targets: list[ExternalTarget],
         *,
         send: bool,
+        chat_messages: Sequence[dict[str, Any] | HHChatMessage] | None = None,
     ) -> HHChatReplyResult:
         targets = external_targets or [ExternalTarget(kind="external_reference", value="external")]
         prepared = generate_prepared_external_response(question, self.profile)
@@ -2156,7 +2377,11 @@ class HHChatRunner:
                 external_result,
             )
 
-        ack_status, ack_message, ack_detail = self._maybe_send_external_ack(preview, question)
+        ack_status, ack_message, ack_detail = self._maybe_send_external_ack(
+            preview,
+            question,
+            chat_messages=chat_messages,
+        )
         if ack_status:
             external_result["hh_ack_status"] = ack_status
 

@@ -18,6 +18,7 @@ class ApplyRunner(Protocol):
 class AutoApplySettings:
     queries: list[str]
     per_query: int = 20
+    pages: int = 1
     draft_threshold: int = 80
     min_score: int = 80
     limit: int = 5
@@ -25,6 +26,7 @@ class AutoApplySettings:
     send: bool = False
     include_demo: bool = False
     company_guard: str = "strict"
+    resume_id: str | None = None
 
 
 def _send_capacity(repo: CRMRepository, settings: AutoApplySettings) -> tuple[int, int | None, bool]:
@@ -33,7 +35,7 @@ def _send_capacity(repo: CRMRepository, settings: AutoApplySettings) -> tuple[in
         return limit, None, False
 
     daily_limit = max(0, settings.daily_limit)
-    sent_today = repo.count_sent_today()
+    sent_today = repo.count_sent_today(resume_id=settings.resume_id)
     remaining = max(0, daily_limit - sent_today)
     return min(limit, remaining), remaining, remaining <= 0
 
@@ -145,7 +147,9 @@ def run_auto_apply_once(
     search_stats = agent.run_once(
         queries=settings.queries,
         per_query=settings.per_query,
+        pages=settings.pages,
         draft_threshold=settings.draft_threshold,
+        resume_id=settings.resume_id,
     )
 
     capacity, daily_remaining, daily_limit_reached = _send_capacity(repo, settings)
@@ -160,6 +164,7 @@ def run_auto_apply_once(
             "quality_skipped": 0,
             "quality_issues": [],
             "send_enabled": settings.send,
+            "resume_id": settings.resume_id,
             "daily_limit": settings.daily_limit,
             "daily_remaining": daily_remaining,
             "daily_limit_reached": daily_limit_reached,
@@ -173,6 +178,7 @@ def run_auto_apply_once(
         limit=capacity,
         include_demo=settings.include_demo,
         company_guard=settings.company_guard,
+        resume_id=settings.resume_id,
     )
     drafts, quality_issues = _quality_checked_drafts(
         repo=repo,
@@ -207,7 +213,10 @@ def run_auto_apply_once(
                 repo.update_application_status(item.application_id, status="blocked")
 
     if settings.send and settings.daily_limit is not None:
-        daily_remaining = max(0, max(0, settings.daily_limit) - repo.count_sent_today())
+        daily_remaining = max(
+            0,
+            max(0, settings.daily_limit) - repo.count_sent_today(resume_id=settings.resume_id),
+        )
         daily_limit_reached = daily_remaining <= 0
 
     result = {
@@ -220,6 +229,7 @@ def run_auto_apply_once(
         "quality_skipped": len(quality_issues),
         "quality_issues": quality_issues,
         "send_enabled": settings.send,
+        "resume_id": settings.resume_id,
         "daily_limit": settings.daily_limit,
         "daily_remaining": daily_remaining,
         "daily_limit_reached": daily_limit_reached,

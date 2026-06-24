@@ -3,12 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 @dataclass(slots=True)
 class ApplyDraft:
     vacancy_id: int | None
     application_id: int | None
+    resume_id: str | None
     title: str
     company: str
     apply_url: str
@@ -75,11 +77,46 @@ LOGIN_SELECTORS = [
     'input[type="password"]',
 ]
 
+RESUME_SELECTED_SELECTORS = [
+    '[data-qa="resume-title"]',
+    '[data-qa="resume-detail"]',
+]
+
+
+def _css_attr_value(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _resume_selectors(resume_id: str) -> list[str]:
+    escaped = _css_attr_value(resume_id)
+    return [
+        f'input[name="resume"][value="{escaped}"]',
+        f'input[type="radio"][value="{escaped}"]',
+        f'input[value="{escaped}"]',
+        f'label:has(input[value="{escaped}"])',
+        f'[data-qa*="resume"]:has(input[value="{escaped}"])',
+    ]
+
+
+def _apply_url_with_resume(apply_url: str, resume_id: str | None) -> str:
+    if not resume_id:
+        return apply_url
+    parts = urlsplit(apply_url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query.setdefault("resume", resume_id)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
+def _url_has_resume(url: str, resume_id: str) -> bool:
+    query = dict(parse_qsl(urlsplit(url).query, keep_blank_values=True))
+    return query.get("resume") == resume_id or query.get("resumeId") == resume_id
+
 
 def row_to_apply_draft(row: dict[str, Any]) -> ApplyDraft:
     return ApplyDraft(
         vacancy_id=int(row["id"]) if row.get("id") is not None else None,
         application_id=int(row["application_id"]) if row.get("application_id") is not None else None,
+        resume_id=str(row.get("resume_id") or "").strip() or None,
         title=str(row.get("title") or "Без названия"),
         company=str(row.get("company") or "Компания не указана"),
         apply_url=str(row.get("apply_url") or row.get("url") or ""),
@@ -124,6 +161,8 @@ class HHWebApplyRunner:
             locale="ru-RU",
         )
         page = context.pages[0] if context.pages else context.new_page()
+        context.set_default_timeout(20_000)
+        context.set_default_navigation_timeout(30_000)
         return cls(page=page, close_handles=[context, playwright])
 
     def close(self) -> None:
@@ -153,7 +192,19 @@ class HHWebApplyRunner:
                 url=draft.apply_url,
             )
 
-        self.page.goto(draft.apply_url, wait_until="domcontentloaded")
+        target_url = _apply_url_with_resume(draft.apply_url, draft.resume_id)
+        try:
+            self.page.goto(target_url, wait_until="domcontentloaded", timeout=30_000)  # type: ignore[call-arg]
+        except TypeError:  # fake/protocol pages in tests may not accept timeout
+            self.page.goto(target_url, wait_until="domcontentloaded")
+        except Exception as exc:
+            return BrowserApplyResult(
+                application_id=draft.application_id,
+                vacancy_id=draft.vacancy_id,
+                status="navigation_timeout",
+                message=f"HH apply page navigation failed: {type(exc).__name__}: {exc}",
+                url=getattr(self.page, "url", draft.apply_url),
+            )
         self._safe_wait("domcontentloaded")
         if self._login_required():
             return BrowserApplyResult(
@@ -161,6 +212,16 @@ class HHWebApplyRunner:
                 vacancy_id=draft.vacancy_id,
                 status="needs_login",
                 message="HH login is required in the browser profile",
+                url=getattr(self.page, "url", draft.apply_url),
+            )
+
+        selected_resume = self._select_resume_if_requested(draft.resume_id)
+        if draft.resume_id and not selected_resume:
+            return BrowserApplyResult(
+                application_id=draft.application_id,
+                vacancy_id=draft.vacancy_id,
+                status="resume_not_found",
+                message=f"Requested HH resume_id was not found on the apply form: {draft.resume_id}",
                 url=getattr(self.page, "url", draft.apply_url),
             )
 
@@ -264,6 +325,26 @@ class HHWebApplyRunner:
                     return
                 except Exception:
                     continue
+
+    def _select_resume_if_requested(self, resume_id: str | None) -> str | None:
+        if not resume_id:
+            return None
+        for selector in _resume_selectors(resume_id):
+            locator = self._safe_locator(selector)
+            if locator and self._safe_count(locator) > 0:
+                try:
+                    locator.click()
+                    self._safe_wait("domcontentloaded")
+                    return selector
+                except Exception:
+                    continue
+        current_url = getattr(self.page, "url", "")
+        if _url_has_resume(current_url, resume_id):
+            for selector in RESUME_SELECTED_SELECTORS:
+                locator = self._safe_locator(selector)
+                if locator and self._safe_count(locator) > 0:
+                    return "query:resume"
+        return None
 
     def _fill_first_available(self, selectors: list[str], value: str) -> str | None:
         for selector in selectors:

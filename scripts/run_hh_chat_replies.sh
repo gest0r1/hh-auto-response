@@ -7,6 +7,14 @@ source "$SCRIPT_DIR/hh_telegram_env.sh"
 
 export HH_CRM_DB_PATH="${HH_CRM_DB_PATH:-./data/hh_crm.sqlite3}"
 
+# Emergency fail-closed lock: after a wrong-answer incident, block all live HH chat sends
+# even if --send/HH_CHAT_REPLY_ALLOW_LIVE_SEND are provided. Dry-runs still work.
+HH_CHAT_LIVE_SEND_DISABLED_FLAG="${HH_CHAT_LIVE_SEND_DISABLED_FLAG:-./data/hh_chat_live_send_disabled.flag}"
+if [[ -f "$HH_CHAT_LIVE_SEND_DISABLED_FLAG" ]]; then
+  export HH_CHAT_REPLY_SEND=0
+  export HH_CHAT_REPLY_ALLOW_LIVE_SEND=0
+fi
+
 if [[ -z "${HH_CHAT_REPLY_PYTHON:-}" ]]; then
   if [[ -x ./.venv/bin/python3 ]]; then
     HH_CHAT_REPLY_PYTHON=./.venv/bin/python3

@@ -72,6 +72,27 @@ CREATE TABLE IF NOT EXISTS run_logs (
     details_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS external_interactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vacancy_id INTEGER REFERENCES vacancies(id) ON DELETE SET NULL,
+    application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL,
+    kind TEXT NOT NULL,
+    target_url TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'draft',
+    resume_id TEXT,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_interactions_application_id
+    ON external_interactions(application_id);
+CREATE INDEX IF NOT EXISTS idx_external_interactions_vacancy_id
+    ON external_interactions(vacancy_id);
+CREATE INDEX IF NOT EXISTS idx_external_interactions_target_url
+    ON external_interactions(target_url);
 """
 
 

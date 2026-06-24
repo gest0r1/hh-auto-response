@@ -58,6 +58,11 @@ def _hh_chat_reply_send_enabled(args: argparse.Namespace) -> bool:
 
 
 def _hh_auto_apply_live_send_allowed() -> bool:
+    disabled_flag = Path(
+        os.getenv("HH_AUTO_APPLY_LIVE_SEND_DISABLED_FLAG", "./data/hh_auto_apply_live_send_disabled.flag")
+    )
+    if disabled_flag.exists():
+        return False
     return _env_flag("HH_AUTO_APPLY_SEND") and _env_flag("HH_AUTO_APPLY_ALLOW_LIVE_SEND")
 
 
@@ -72,6 +77,13 @@ def _hh_browser_submit_enabled(args: argparse.Namespace) -> bool:
         file=sys.stderr,
     )
     return False
+
+
+def _hh_auto_apply_resume_id(args: argparse.Namespace, settings: object) -> str | None:
+    value = getattr(args, "resume_id", None) or os.getenv("HH_AUTO_APPLY_RESUME_ID") or getattr(
+        settings, "hh_resume_id", None
+    )
+    return str(value).strip() or None if value is not None else None
 
 
 def _hh_chat_external_submit_enabled(args: argparse.Namespace) -> bool:
@@ -265,7 +277,14 @@ def _keep_browser_open_for_review(enabled: bool, results: list) -> None:
 def cmd_apply_browser_queue(args: argparse.Namespace) -> None:
     settings = get_settings()
     repo = _repo()
-    rows = repo.review_queue(min_score=args.min_score, limit=args.limit, include_demo=args.include_demo)
+    resume_id = _hh_auto_apply_resume_id(args, settings)
+    rows = repo.review_queue(
+        min_score=args.min_score,
+        limit=args.limit,
+        include_demo=args.include_demo,
+        company_guard=args.company_guard,
+        resume_id=resume_id,
+    )
     drafts, quality_issues = _quality_checked_drafts(
         repo=repo,
         rows=rows,
@@ -310,6 +329,7 @@ def cmd_apply_browser_queue(args: argparse.Namespace) -> None:
                 "quality_skipped": len(quality_issues),
                 "quality_issues": quality_issues,
                 "send_enabled": send_enabled,
+                "resume_id": resume_id,
                 "statuses": [result.status for result in results],
             },
             ensure_ascii=False,
@@ -323,6 +343,7 @@ def cmd_auto_apply(args: argparse.Namespace) -> None:
     repo = _repo()
     queries = args.query or _default_queries()
     user_data_dir = args.user_data_dir or settings.hh_browser_user_data_dir
+    resume_id = _hh_auto_apply_resume_id(args, settings)
     fetch_details = os.getenv("HH_AUTO_APPLY_FETCH_DETAILS", "1") == "1"
     require_details = fetch_details and os.getenv("HH_AUTO_APPLY_REQUIRE_DETAILS", "1") == "1"
     send_enabled = _hh_browser_submit_enabled(args)
@@ -341,6 +362,7 @@ def cmd_auto_apply(args: argparse.Namespace) -> None:
             settings=AutoApplySettings(
                 queries=queries,
                 per_query=args.per_query,
+                pages=args.pages,
                 draft_threshold=args.draft_threshold,
                 min_score=args.min_score,
                 limit=args.limit,
@@ -348,6 +370,7 @@ def cmd_auto_apply(args: argparse.Namespace) -> None:
                 send=send_enabled,
                 include_demo=args.include_demo,
                 company_guard=args.company_guard,
+                resume_id=resume_id,
             ),
         )
     finally:
@@ -461,6 +484,13 @@ def build_parser() -> argparse.ArgumentParser:
     apply_browser.add_argument("--min-score", type=int, default=80)
     apply_browser.add_argument("--limit", type=int, default=5)
     apply_browser.add_argument("--user-data-dir", default=None)
+    apply_browser.add_argument("--resume-id", default=None, help="Only fill/send drafts tied to this HH resume_id")
+    apply_browser.add_argument(
+        "--company-guard",
+        choices=("strict", "family", "off"),
+        default=os.getenv("HH_AUTO_APPLY_COMPANY_GUARD", "strict"),
+        help="Company duplicate guard for selecting drafts from the CRM queue.",
+    )
     apply_browser.add_argument("--headless", action="store_true")
     apply_browser.add_argument(
         "--keep-open",
@@ -485,6 +515,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     auto_apply.add_argument("--query", action="append", help="HH search query; can be repeated")
     auto_apply.add_argument("--per-query", type=int, default=20)
+    auto_apply.add_argument("--pages", type=int, default=int(os.getenv("HH_AUTO_APPLY_PAGES", "1")))
     auto_apply.add_argument("--draft-threshold", type=int, default=80)
     auto_apply.add_argument("--min-score", type=int, default=80)
     auto_apply.add_argument("--limit", type=int, default=5)
@@ -499,6 +530,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     auto_apply.add_argument("--user-data-dir", default=None)
+    auto_apply.add_argument("--resume-id", default=None, help="HH resume_id to attach to generated drafts and select on HH apply forms")
     auto_apply.add_argument("--headless", action="store_true")
     auto_apply.add_argument(
         "--include-demo",

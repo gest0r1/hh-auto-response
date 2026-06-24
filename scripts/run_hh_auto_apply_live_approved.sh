@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 
 # Approved live lane for HH auto-apply after cover-letter/scoring hardening.
 # Owner-approved high-volume mode:
-# - details are fetched and required before drafting;
+# - details are fetched when available; missing details do not starve the high-volume queue;
 # - Junior-to-Teamlead Python Backend / AI Backend / AgentOps / LLM Platform queries plus HH top-feed AI titles;
 # - review lane starts from 75 so high-volume mode does not starve the queue;
 # - 50 per run and 50 per day by default, matching the requested high-volume range;
@@ -13,10 +13,12 @@ cd "$(dirname "$0")/.."
 # - real HH submit is still double-gated here, never via the dry-run daily wrapper.
 export HH_AUTO_APPLY_SEND="${HH_AUTO_APPLY_SEND:-1}"
 export HH_AUTO_APPLY_ALLOW_LIVE_SEND="${HH_AUTO_APPLY_ALLOW_LIVE_SEND:-1}"
+export HH_AUTO_APPLY_RESUME_ID="${HH_AUTO_APPLY_RESUME_ID:-b2b0d680ff1065a62b0039ed1f4f426b6d6b73}"
 export HH_AUTO_APPLY_HEADLESS="${HH_AUTO_APPLY_HEADLESS:-1}"
 export HH_AUTO_APPLY_FETCH_DETAILS="${HH_AUTO_APPLY_FETCH_DETAILS:-1}"
-export HH_AUTO_APPLY_REQUIRE_DETAILS="${HH_AUTO_APPLY_REQUIRE_DETAILS:-1}"
+export HH_AUTO_APPLY_REQUIRE_DETAILS="${HH_AUTO_APPLY_REQUIRE_DETAILS:-0}"
 export HH_AUTO_APPLY_PER_QUERY="${HH_AUTO_APPLY_PER_QUERY:-50}"
+export HH_AUTO_APPLY_PAGES="${HH_AUTO_APPLY_PAGES:-5}"
 export HH_AUTO_APPLY_DRAFT_THRESHOLD="${HH_AUTO_APPLY_DRAFT_THRESHOLD:-75}"
 export HH_AUTO_APPLY_MIN_SCORE="${HH_AUTO_APPLY_MIN_SCORE:-75}"
 export HH_AUTO_APPLY_LIMIT="${HH_AUTO_APPLY_LIMIT:-50}"

@@ -84,6 +84,50 @@ def test_generate_cover_letter_never_uses_employer_name_as_greeting():
     assert "https://portfolio.viably.dev" in response.message
 
 
+def test_backend_case_ranking_prefers_stronger_recent_cases_over_viably():
+    profile = ApplicantProfile(
+        full_name="Александр Олегович",
+        headline="Python Backend Developer",
+        cases=[
+            CaseStudy(
+                title="Viably — AI Product Platform",
+                stack=["FastAPI", "PostgreSQL", "Docker", "API"],
+                result="AI generation pipeline, preview runtime, deployment flow и production-инфраструктура",
+            ),
+            CaseStudy(
+                title="whynotai Telegram Agents - платформа Telegram AI-агентов",
+                stack=["Python", "FastAPI", "PostgreSQL", "Redis", "Celery", "Telethon", "Docker"],
+                result="SaaS-панель для Telegram-аккаунтов, proxy manager, AI-кампаний, лимитов, статусов и отчетов",
+            ),
+            CaseStudy(
+                title="Transoff AI Sales QA Platform - контроль качества звонков",
+                stack=["Python", "PostgreSQL", "Telegram Bot API", "Google Sheets API", "STT", "Linux"],
+                result="production-контур для обработки звонков, AI-разбора, дашборда, алертов и отчетов",
+            ),
+            CaseStudy(
+                title="Crypto Arbitrage Platform",
+                stack=["Python", "REST", "WebSocket", "Telegram Bots", "CEX", "DEX"],
+                result="платформа поиска арбитражных возможностей между 30+ CEX и DEX в реальном времени",
+            ),
+        ],
+        portfolio_url="https://portfolio.viably.dev",
+    )
+    vacancy = Vacancy(
+        external_id="hh-backend-ranking",
+        title="Python Backend Developer",
+        company="Example",
+        description="Нужен backend-разработчик: Python, REST API, PostgreSQL, интеграции, workers, Docker и поддержка production-сервиса.",
+        url="https://hh.ru/vacancy/backend-ranking",
+        skills=["Python", "REST API", "PostgreSQL", "Docker", "WebSocket"],
+    )
+
+    titles = [case.title for case in _best_cases(profile, vacancy, limit=4)]
+
+    assert titles[0] != "Viably — AI Product Platform"
+    assert titles.index("Viably — AI Product Platform") > titles.index("whynotai Telegram Agents - платформа Telegram AI-агентов")
+    assert titles.index("Viably — AI Product Platform") > titles.index("Transoff AI Sales QA Platform - контроль качества звонков")
+
+
 def test_sanitize_cover_letter_greeting_removes_legacy_employer_addressing():
     legacy = (
         "Здравствуйте, ИП Москвина Наталья Александровна! "
